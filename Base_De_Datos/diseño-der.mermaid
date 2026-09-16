@@ -1,0 +1,94 @@
+erDiagram
+    %% ==========================================
+    %% ENTIDADES Y ATRIBUTOS (PostgreSQL / DER)
+    %% ==========================================
+
+    %% Manejo de autenticación y acceso por roles (CLINICA, EMPRESA, PACIENTE)
+    USUARIOS {
+        UUID id PK
+        VARCHAR email
+        VARCHAR password_hash
+        ENUM rol
+        UUID entidad_referencia_id FK "Referencia polimórfica según el rol"
+    }
+
+    %% Organizaciones cliente que solicitan los exámenes
+    EMPRESAS {
+        UUID id PK
+        VARCHAR razon_social
+        VARCHAR cuit
+    }
+
+    %% Catálogo de vigencia de aptos según el puesto específico por empresa
+    PUESTOS_REQUISITOS {
+        UUID id PK
+        VARCHAR nombre_puesto
+        INTEGER meses_vigencia
+        UUID empresa_id FK
+    }
+
+    %% Lugares físicos de atención (Neuquén Capital, Rincón de los Sauces, etc.)
+    SEDES {
+        UUID id PK
+        VARCHAR nombre
+        VARCHAR direccion
+    }
+
+    %% Empleados o postulantes
+    PACIENTES {
+        UUID id PK
+        VARCHAR dni
+        VARCHAR nombre
+        VARCHAR apellido
+        UUID empresa_id FK
+        UUID puesto_id FK
+        UUID usuario_id FK "Opcional"
+    }
+
+    %% Asignación de fecha, hora y sede para evaluación
+    TURNOS {
+        UUID id PK
+        TIMESTAMP fecha_hora
+        ENUM estado "PENDIENTE, ASISTIO, CANCELADO"
+        UUID paciente_id FK
+        UUID sede_id FK
+    }
+
+    %% Resultados de exámenes preocupacionales y periódicos
+    APTOS_MEDICOS {
+        UUID id PK
+        DATE fecha_emision
+        DATE fecha_vencimiento
+        ENUM estado_aptitud "APTO, NO_APTO, PENDIENTE"
+        TEXT detalle_clinico
+        UUID turno_id FK "UNIQUE (Relación 1:1 con Turno)"
+        UUID paciente_id FK
+    }
+
+    %% ==========================================
+    %% RELACIONES ENTRE ENTIDADES
+    %% ==========================================
+
+    %% Una empresa define varios puestos con sus requisitos
+    EMPRESAS ||--o{ PUESTOS_REQUISITOS : "define"
+
+    %% Una empresa tiene o postula a muchos pacientes
+    EMPRESAS ||--o{ PACIENTES : "emplea / postula"
+
+    %% Un puesto requisito aplica a múltiples pacientes
+    PUESTOS_REQUISITOS ||--o{ PACIENTES : "aplica a"
+
+    %% Un usuario puede vincularse opcionalmente a un paciente o empresa
+    USUARIOS ||--o| PACIENTES : "vincula a"
+
+    %% Una sede alberga múltiples turnos
+    SEDES ||--o{ TURNOS : "alberga"
+
+    %% Un paciente puede solicitar múltiples turnos
+    PACIENTES ||--o{ TURNOS : "solicita"
+
+    %% Un turno genera exactamente un apto médico (relación 1:1)
+    TURNOS ||--|| APTOS_MEDICOS : "genera"
+
+    %% Un paciente posee un historial de aptos médicos
+    PACIENTES ||--o{ APTOS_MEDICOS : "posee"
