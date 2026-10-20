@@ -1,0 +1,39 @@
+{
+  "name": "checkpoint-salud-b2b",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build",
+    "format": "oxfmt src/"
+  },
+  "dependencies": {
+    "pinia": "^4.0.3",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.5",
+    "@types/node": "^24.13.4",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "npm-run-all2": "^9.0.3",
+    "oxfmt": "^0.67.0",
+    "typescript": "~6.0.0",
+    "vite": "^8.2.2",
+    "vite-plugin-vue-devtools": "^8.2.1",
+    "vue-tsc": "^3.3.11"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "description": "<p align=\"center\">   <img src=\"https://i.imgur.com/VC7trkE.png\" alt=\"ITS Soluciones Logo\" width=\"220\"/> </p>",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

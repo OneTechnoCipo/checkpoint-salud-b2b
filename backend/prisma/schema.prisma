@@ -1,0 +1,116 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RolUsuario {
+  CLINICA
+  EMPRESA
+  ADMIN
+}
+
+enum EstadoTurno {
+  PENDIENTE
+  ASISTIO
+  CANCELADO
+}
+
+enum EstadoAptitud {
+  APTO
+  NO_APTO
+  PENDIENTE
+}
+
+model Usuario {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  rol          RolUsuario
+  empresaId    String?   @map("empresa_id") @db.Uuid
+  empresa      Empresa?  @relation(fields: [empresaId], references: [id])
+
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  @@map("usuarios")
+}
+
+model Empresa {
+  id           String   @id @default(uuid()) @db.Uuid
+  razonSocial  String   @map("razon_social") @db.VarChar(255)
+  cuit         String   @unique @db.VarChar(20)
+  usuarios     Usuario[]
+  puestos      PuestoRequisito[]
+  pacientes    Paciente[]
+
+  @@map("empresas")
+}
+
+model PuestoRequisito {
+  id             String   @id @default(uuid()) @db.Uuid
+  nombrePuesto   String   @map("nombre_puesto") @db.VarChar(150)
+  mesesVigencia  Int      @map("meses_vigencia")
+  empresaId      String   @map("empresa_id") @db.Uuid
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+  pacientes      Paciente[]
+
+  @@unique([nombrePuesto, empresaId])
+  @@map("puestos_requisitos")
+}
+
+model Sede {
+  id        String   @id @default(uuid()) @db.Uuid
+  nombre    String   @db.VarChar(150)
+  direccion String   @db.VarChar(255)
+  turnos    Turno[]
+
+  @@map("sedes")
+}
+
+model Paciente {
+  id         String   @id @default(uuid()) @db.Uuid
+  dni        String   @unique @db.VarChar(20)
+  nombre     String   @db.VarChar(100)
+  apellido   String   @db.VarChar(100)
+  empresaId  String   @map("empresa_id") @db.Uuid
+  puestoId   String   @map("puesto_id") @db.Uuid
+  empresa    Empresa  @relation(fields: [empresaId], references: [id])
+  puesto     PuestoRequisito @relation(fields: [puestoId], references: [id])
+  turnos     Turno[]
+  aptos      AptoMedico[]
+
+  @@map("pacientes")
+}
+
+model Turno {
+  id          String      @id @default(uuid()) @db.Uuid
+  fechaHora   DateTime    @map("fecha_hora")
+  estado      EstadoTurno @default(PENDIENTE)
+  pacienteId  String      @map("paciente_id") @db.Uuid
+  sedeId      String      @map("sede_id") @db.Uuid
+  paciente    Paciente    @relation(fields: [pacienteId], references: [id])
+  sede        Sede        @relation(fields: [sedeId], references: [id])
+  apto        AptoMedico?
+
+  @@map("turnos")
+}
+
+model AptoMedico {
+  id               String        @id @default(uuid()) @db.Uuid
+  fechaEmision     DateTime?     @map("fecha_emision") @db.Date
+  fechaVencimiento DateTime?     @map("fecha_vencimiento") @db.Date
+  estadoAptitud    EstadoAptitud @default(PENDIENTE) @map("estado_aptitud")
+  detalleClinico   String?       @map("detalle_clinico") @db.Text
+  documentoUrl     String?       @map("documento_url") @db.VarChar(500)
+  turnoId          String?       @unique @map("turno_id") @db.Uuid
+  pacienteId       String        @map("paciente_id") @db.Uuid
+  turno            Turno?        @relation(fields: [turnoId], references: [id])
+  paciente         Paciente      @relation(fields: [pacienteId], references: [id])
+
+  @@map("aptos_medicos")
+}
+
