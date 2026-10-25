@@ -5,6 +5,7 @@ import cors from "cors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { prisma } from "./lib/prisma.js";
+import { autenticar, permitirRoles } from "./middlewares/auth.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -116,6 +117,19 @@ app.post("/api/auth/login", async (req, res) => {
       mensaje: "Ocurrió un error al iniciar sesión.",
     });
   }
+});
+
+// Rutas protegidas por rol (espejo de las pantallas del frontend).
+app.get("/api/clinica", autenticar, permitirRoles("CLINICA"), (_req, res) => {
+  res.json({ mensaje: "Acceso permitido: panel de Clínica." });
+});
+
+app.get("/api/empresa", autenticar, permitirRoles("EMPRESA"), (_req, res) => {
+  res.json({ mensaje: "Acceso permitido: panel de Empresa." });
+});
+
+app.get("/api/admin", autenticar, permitirRoles("ADMIN"), (_req, res) => {
+  res.json({ mensaje: "Acceso permitido: panel de Administración." });
 });
 
 app.listen(PORT, () => {
