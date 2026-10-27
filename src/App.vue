@@ -17,7 +17,9 @@ const rol = computed<Rol | null>(() => {
 const rutasSinMenu = ['/login', '/acceso-denegado']
 
 const mostrarMenu = computed(
-  () => !rutasSinMenu.includes(route.path) && rol.value !== null
+  () => 
+  !rutasSinMenu.includes(route.path) && rol.value !== null &&
+   menuPorRol[rol.value].length > 0
   )
 </script>
 

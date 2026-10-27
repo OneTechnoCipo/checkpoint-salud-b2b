@@ -27,4 +27,5 @@ export const menuPorRol: Record<Rol, MenuItem[]> = {
     { label: 'Empresas', route: '/empresas', icon: 'building' },
     { label: 'Puestos y requisitos', route: '/puestos', icon: 'clipboard' },
   ],
+  PACIENTE: [],
 }
