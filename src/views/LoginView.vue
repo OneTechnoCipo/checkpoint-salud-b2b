@@ -3,6 +3,8 @@
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
+import {iniciarSesionMock} from '../services/authMock'
+import type { Rol } from '../types/auth'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -17,7 +19,10 @@ async function iniciarSesion() {
   error.value = ''
 
   const correo = email.value.trim()
-
+console.log(
+  'Modo mock:',
+  import.meta.env.VITE_USE_AUTH_MOCK,
+)
   if (!correo || !password.value) {
     error.value = 'Completá el correo electrónico y la contraseña.'
     return
@@ -33,72 +38,90 @@ async function iniciarSesion() {
 
   cargando.value = true
 
+ 
   try {
-    const respuesta = await fetch(
-      'http://localhost:3000/api/auth/login',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: correo,
-          password: password.value,
-          recordarme: recordarme.value,
-        }),
-      },
-    )
-
-    const datos = await respuesta.json()
-
-    if (!respuesta.ok) {
-      error.value =
-        respuesta.status === 401
-          ? 'Correo electrónico o contraseña incorrectos.'
-          : datos.mensaje || 'No se pudo iniciar sesión.'
-      return
+    let datos: {
+      token: string
+      usuario: {
+        id: string
+        email: string
+        rol: Rol
+      }
+      mensaje?: string
     }
 
-    // Verificar que la respuesta contenga los datos necesarios
+    if (import.meta.env.VITE_USE_AUTH_MOCK === 'true') {
+      // Modo simulado: no necesita el backend.
+      datos = await iniciarSesionMock(correo, password.value)
+    } else {
+      // Modo real: consulta al backend.
+      const respuesta = await fetch(
+        'http://localhost:3000/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: correo,
+            password: password.value,
+            recordarme: recordarme.value,
+          }),
+        },
+      )
+
+      const respuestaDatos = await respuesta.json()
+
+      if (!respuesta.ok) {
+        error.value =
+          respuesta.status === 401
+            ? 'Correo electrónico o contraseña incorrectos.'
+            : respuestaDatos.mensaje || 'No se pudo iniciar sesión.'
+        return
+      }
+
+      datos = respuestaDatos
+    }
+
     if (
       !datos.token ||
       !datos.usuario ||
-      !['CLINICA', 'EMPRESA', 'ADMIN'].includes(datos.usuario.rol)
+      !['CLINICA', 'EMPRESA', 'ADMIN', 'PACIENTE'].includes(datos.usuario.rol)
     ) {
       error.value = 'La respuesta del servidor no es válida.'
       return
     }
 
-    // Guardar la sesión
     authStore.iniciarSesion({
       token: datos.token,
       usuario: datos.usuario,
     })
 
-    // Redirigir según el rol del usuario
     switch (datos.usuario.rol) {
       case 'CLINICA':
         await router.push('/clinica')
         break
-
       case 'EMPRESA':
         await router.push('/empresa')
         break
-
       case 'ADMIN':
         await router.push('/admin')
         break
-
+           case 'PACIENTE':
+        await router.push('/paciente')
+        break
       default:
         authStore.cerrarSesion()
         error.value = 'No se reconoce el rol de usuario.'
         return
     }
-  } catch {
-    error.value = 'No se pudo conectar con el servidor.'
+  } catch (e) {
+    error.value =
+      e instanceof Error
+        ? e.message
+        : 'No se pudo conectar con el servidor.'
   } finally {
     cargando.value = false
   }
+
 }
 </script>
 

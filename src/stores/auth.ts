@@ -1,11 +1,5 @@
-
 import { defineStore } from 'pinia'
-
-interface Usuario {
-  id: string
-  email: string
-  rol: string
-}
+import type { Usuario } from '../types/auth'
 
 interface Sesion {
   token: string
@@ -17,9 +11,11 @@ const CLAVE_SESION = 'checkpoint-sesion'
 function leerSesion(): Sesion | null {
   try {
     const guardada = localStorage.getItem(CLAVE_SESION)
+
     if (!guardada) return null
 
     const sesion = JSON.parse(guardada) as Sesion
+
     return sesion.token && sesion.usuario ? sesion : null
   } catch {
     return null
@@ -37,19 +33,25 @@ export const useAuthStore = defineStore('auth', {
   },
 
   getters: {
-    estaAutenticado: (state) => Boolean(state.token && state.usuario),
+    estaAutenticado: (state) =>
+      Boolean(state.token && state.usuario),
   },
 
   actions: {
     iniciarSesion(sesion: Sesion) {
       this.token = sesion.token
       this.usuario = sesion.usuario
-      localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion))
+
+      localStorage.setItem(
+        CLAVE_SESION,
+        JSON.stringify(sesion),
+      )
     },
 
     cerrarSesion() {
       this.token = null
       this.usuario = null
+
       localStorage.removeItem(CLAVE_SESION)
     },
   },
