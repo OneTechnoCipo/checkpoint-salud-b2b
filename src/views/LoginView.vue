@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 import {iniciarSesionMock} from '../services/authMock'
+import type { Rol } from '../types/auth'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -44,7 +45,7 @@ console.log(
       usuario: {
         id: string
         email: string
-        rol: string
+        rol: Rol
       }
       mensaje?: string
     }
@@ -83,7 +84,7 @@ console.log(
     if (
       !datos.token ||
       !datos.usuario ||
-      !['CLINICA', 'EMPRESA', 'ADMIN'].includes(datos.usuario.rol)
+      !['CLINICA', 'EMPRESA', 'ADMIN', 'PACIENTE'].includes(datos.usuario.rol)
     ) {
       error.value = 'La respuesta del servidor no es válida.'
       return
@@ -103,6 +104,9 @@ console.log(
         break
       case 'ADMIN':
         await router.push('/admin')
+        break
+           case 'PACIENTE':
+        await router.push('/paciente')
         break
       default:
         authStore.cerrarSesion()

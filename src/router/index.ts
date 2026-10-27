@@ -40,12 +40,20 @@ const router = createRouter({
       component: () => import('../views/AdminView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN'] },
     },
+     {
+  path: '/paciente',
+  name: 'paciente',
+  component: () => import('../views/PacienteView.vue'),
+  meta: {requiresAuth: true,roles: ['PACIENTE'],
+  },
+},
     {
       path: '/acceso-denegado',
       name: 'acceso-denegado',
       component: () => import('../views/AccesoDenegadoView.vue'),
       meta: { requiresAuth: true },
     },
+  
   ],
 })
 
