@@ -24,9 +24,38 @@ const router = createRouter({
     },
     {
       path: '/clinica',
-      name: 'clinica',
-      component: () => import('../views/ClinicaView.vue'),
       meta: { requiresAuth: true, roles: ['CLINICA'] },
+      children: [
+        {
+          path: '',
+          name: 'clinica',
+          component: () => import('../views/ClinicaView.vue'),
+        },
+        {
+          path: 'empresas',
+          name: 'clinica-empresas',
+          component: () => import('../views/clinica/EmpresasView.vue'),
+          props: { titulo: 'Empresas' },
+        },
+        {
+          path: 'turnos',
+          name: 'clinica-turnos',
+          component: () => import('../views/clinica/TurnosView.vue'),
+          props: { titulo: 'Turnos solicitados' },
+        },
+        {
+          path: 'aptos',
+          name: 'clinica-aptos',
+          component: () => import('../views/EnDesarrolloView.vue'),
+          props: { titulo: 'Aptos y vencimientos' },
+        },
+        {
+          path: 'carga-masiva',
+          name: 'clinica-carga-masiva',
+          component: () => import('../views/clinica/CargaMasivaView.vue'),
+          props: { titulo: 'Carga masiva' },
+        },
+      ],
     },
     {
       path: '/empresa',

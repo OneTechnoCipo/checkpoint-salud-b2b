@@ -9,10 +9,10 @@ export interface MenuItem {
 export const menuPorRol: Record<Rol, MenuItem[]> = {
   CLINICA: [
     { label: 'Inicio', route: '/clinica', icon: 'home' },
-    { label: 'Empresas', route: '/empresas', icon: 'building' },
-    { label: 'Turnos', route: '/turnos', icon: 'calendar' },
-    { label: 'Aptos y vencimientos', route: '/aptos', icon: 'check' },
-    { label: 'Carga masiva', route: '/carga-masiva', icon: 'upload' },
+    { label: 'Empresas', route: '/clinica/empresas', icon: 'building' },
+    { label: 'Turnos', route: '/clinica/turnos', icon: 'calendar' },
+    { label: 'Aptos y vencimientos', route: '/clinica/aptos', icon: 'check' },
+    { label: 'Carga masiva', route: '/clinica/carga-masiva', icon: 'upload' },
   ],
   EMPRESA: [
     { label: 'Inicio', route: '/empresa', icon: 'home' },
