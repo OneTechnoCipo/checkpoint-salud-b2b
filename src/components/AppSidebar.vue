@@ -46,6 +46,7 @@ const opcionesMenu = computed(() => menuPorRol[props.rol] ?? [])
 }
 .logo h2 {
   margin: 0;
+  color: white;
 }
 .logo span {
   font-size: 20px;
@@ -65,7 +66,7 @@ const opcionesMenu = computed(() => menuPorRol[props.rol] ?? [])
   background: #111e35;
   color: white;
 }
-.menu-item.router-link-active {
+.menu-item.router-link-exact-active {
   color: #00dbe7;
   border-bottom: 2px solid #00dbe7;
 }
