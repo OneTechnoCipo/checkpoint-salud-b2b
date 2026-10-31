@@ -8,6 +8,7 @@ const auth = useAuthStore()
 
 const rutaInicio = computed(() => {
   const rol = auth.usuario?.rol?.toUpperCase() as Rol | undefined
+  if (rol === 'PACIENTE') return '/paciente'
   return (rol && menuPorRol[rol]?.[0]?.route) || '/login'
 })
 </script>
