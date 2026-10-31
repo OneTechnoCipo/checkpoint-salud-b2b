@@ -99,11 +99,10 @@ const filtros: {
         v-model="filtroEstado"
         class="cursor-pointer appearance-none rounded-xl border border-[#dbe7ee] bg-white py-2.5 pl-4 pr-10 text-sm font-medium text-[#172033] shadow-sm outline-none transition focus:border-[#38b8cf] focus:ring-2 focus:ring-[#38b8cf]/10 hover:border-[#b8dce5]"
       >
-        <option value="TODOS">Todos</option>
-        <option value="PENDIENTE">Pendiente</option>
-        <option value="ASISTIO">Asistió</option>
-        <option value="CANCELADO">Cancelado</option>
-      </select>
+      <option v-for="f in filtros" :key="f.valor" :value="f.valor">
+        {{ f.etiqueta }}
+      </option>
+    </select>
 
       <!-- Flecha -->
       <svg
