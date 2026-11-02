@@ -36,6 +36,7 @@ const mostrarMenu = computed(
 .layout {
   display: flex;
   min-height: 100vh;
+  padding-left: 210px;
 }
 .contenido {
   flex: 1;

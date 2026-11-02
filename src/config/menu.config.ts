@@ -16,10 +16,10 @@ export const menuPorRol: Record<Rol, MenuItem[]> = {
   ],
   EMPRESA: [
     { label: 'Inicio', route: '/empresa', icon: 'home' },
-    { label: 'Trabajadores', route: '/trabajadores', icon: 'users' },
-    { label: 'Turnos', route: '/turnos', icon: 'calendar' },
-    { label: 'Aptos y vencimientos', route: '/aptos', icon: 'check' },
-    { label: 'Carga masiva', route: '/carga-masiva', icon: 'upload' },
+    { label: 'Trabajadores', route: '/empresa/trabajadores', icon: 'users' },
+    { label: 'Turnos', route: '/empresa/turnos', icon: 'calendar' },
+    { label: 'Aptos y vencimientos', route: '/empresa/aptos', icon: 'check' },
+    { label: 'Carga masiva', route: '/empresa/carga-masiva', icon: 'upload' },
   ],
   ADMIN: [
     { label: 'Inicio', route: '/admin', icon: 'home' },
