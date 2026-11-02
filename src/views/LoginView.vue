@@ -1,9 +1,8 @@
-
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
-import {iniciarSesionMock} from '../services/authMock'
+import { iniciarSesionMock } from '../services/authMock'
 import type { Rol } from '../types/auth'
 
 const authStore = useAuthStore()
@@ -19,10 +18,7 @@ async function iniciarSesion() {
   error.value = ''
 
   const correo = email.value.trim()
-console.log(
-  'Modo mock:',
-  import.meta.env.VITE_USE_AUTH_MOCK,
-)
+
   if (!correo || !password.value) {
     error.value = 'Completá el correo electrónico y la contraseña.'
     return
@@ -38,7 +34,6 @@ console.log(
 
   cargando.value = true
 
- 
   try {
     let datos: {
       token: string
@@ -50,36 +45,8 @@ console.log(
       mensaje?: string
     }
 
-    if (import.meta.env.VITE_USE_AUTH_MOCK === 'true') {
-      // Modo simulado: no necesita el backend.
-      datos = await iniciarSesionMock(correo, password.value)
-    } else {
-      // Modo real: consulta al backend.
-      const respuesta = await fetch(
-        'http://localhost:3000/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: correo,
-            password: password.value,
-            recordarme: recordarme.value,
-          }),
-        },
-      )
-
-      const respuestaDatos = await respuesta.json()
-
-      if (!respuesta.ok) {
-        error.value =
-          respuesta.status === 401
-            ? 'Correo electrónico o contraseña incorrectos.'
-            : respuestaDatos.mensaje || 'No se pudo iniciar sesión.'
-        return
-      }
-
-      datos = respuestaDatos
-    }
+    // Ejecución del login simulado (Mock / LocalStorage)
+    datos = await iniciarSesionMock(correo, password.value)
 
     if (
       !datos.token ||
@@ -105,7 +72,7 @@ console.log(
       case 'ADMIN':
         await router.push('/admin')
         break
-           case 'PACIENTE':
+      case 'PACIENTE':
         await router.push('/paciente')
         break
       default:
@@ -121,7 +88,6 @@ console.log(
   } finally {
     cargando.value = false
   }
-
 }
 </script>
 
