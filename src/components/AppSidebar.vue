@@ -34,11 +34,18 @@ const opcionesMenu = computed(() => menuPorRol[props.rol] ?? [])
 
 <style scoped>
 .sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 210px;
-  min-height: 100vh;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow-y: auto;
   padding: 26px 10px;
   background: #0B0F21;
   color: white;
+  z-index: 10;
+  box-sizing: border-box;
 }
 .logo {
   margin-bottom: 50px;
