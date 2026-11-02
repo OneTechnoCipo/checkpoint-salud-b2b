@@ -59,9 +59,38 @@ const router = createRouter({
     },
     {
       path: '/empresa',
-      name: 'empresa',
-      component: () => import('../views/EmpresaView.vue'),
       meta: { requiresAuth: true, roles: ['EMPRESA'] },
+      children: [
+        {
+          path: '',
+          name: 'empresa',
+          component: () => import('../views/EmpresaView.vue'),
+        },
+        {
+          path: 'trabajadores',
+          name: 'empresa-trabajadores',
+          component: () => import('../views/empresa/TrabajadoresView.vue'),
+          props: { titulo: 'Trabajadores' },
+        },
+        {
+          path: 'turnos',
+          name: 'empresa-turnos',
+          component: () => import('../views/empresa/TurnosView.vue'),
+          props: { titulo: 'Turnos solicitados' },
+        },
+        {
+          path: 'aptos',
+          name: 'empresa-aptos',
+          component: () => import('../views/EnDesarrolloView.vue'),
+          props: { titulo: 'Aptos y vencimientos' },
+        },
+        {
+          path: 'carga-masiva',
+          name: 'empresa-carga-masiva',
+          component: () => import('../views/empresa/CargaMasivaView.vue'),
+          props: { titulo: 'Carga masiva' },
+        },
+      ],
     },
     {
       path: '/admin',
