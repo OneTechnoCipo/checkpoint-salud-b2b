@@ -157,13 +157,15 @@ code {
       scale(0.8);
   }
 }
-
+html,
+body,
 #app {
   max-width: 100%;
-  margin: 0 auto;
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+  box-sizing: border-box;
+  margin:0;
+}
+#app{
+  min-height: 100vh;
   box-sizing: border-box;
 }
 
