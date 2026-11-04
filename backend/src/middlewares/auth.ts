@@ -1,7 +1,8 @@
+
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
-export type Rol = "CLINICA" | "EMPRESA" | "ADMIN";
+export type Rol = "CLINICA" | "EMPRESA" | "ADMIN" | "PACIENTE";
 
 export interface UsuarioAutenticado {
   id: string;
@@ -16,7 +17,7 @@ declare global {
   }
 }
 
-const ROLES_VALIDOS: Rol[] = ["CLINICA", "EMPRESA", "ADMIN"];
+const ROLES_VALIDOS: Rol[] = ["CLINICA", "EMPRESA", "ADMIN", "PACIENTE"];
 
 // Verifica el token. Sin sesión válida responde 401.
 export function autenticar(req: Request, res: Response, next: NextFunction) {
@@ -44,7 +45,8 @@ export function autenticar(req: Request, res: Response, next: NextFunction) {
     if (
       typeof payload === "string" ||
       typeof payload.sub !== "string" ||
-      !ROLES_VALIDOS.includes(payload.rol)
+      typeof payload.rol !== "string" ||
+      !ROLES_VALIDOS.includes(payload.rol as Rol)
     ) {
       res.status(401).json({ mensaje: "La sesión no es válida." });
       return;
