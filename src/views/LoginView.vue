@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
-import { iniciarSesionMock } from '../services/authMock'
+import { iniciarSesionApi } from '../services/session'
 import type { Rol } from '../types/auth'
 
 const authStore = useAuthStore()
@@ -46,12 +46,12 @@ async function iniciarSesion() {
     }
 
     // Ejecución del login simulado (Mock / LocalStorage)
-    datos = await iniciarSesionMock(correo, password.value)
+    datos = await iniciarSesionApi(correo, password.value)
 
     if (
       !datos.token ||
       !datos.usuario ||
-      !['CLINICA', 'EMPRESA', 'ADMIN', 'PACIENTE'].includes(datos.usuario.rol)
+      !['CLINICA', 'EMPRESA', 'ADMIN'].includes(datos.usuario.rol)
     ) {
       error.value = 'La respuesta del servidor no es válida.'
       return
