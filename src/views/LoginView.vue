@@ -51,7 +51,7 @@ async function iniciarSesion() {
     if (
       !datos.token ||
       !datos.usuario ||
-      !['CLINICA', 'EMPRESA', 'ADMIN'].includes(datos.usuario.rol)
+      !['CLINICA', 'EMPRESA', 'ADMIN','PACIENTE'].includes(datos.usuario.rol)
     ) {
       error.value = 'La respuesta del servidor no es válida.'
       return
