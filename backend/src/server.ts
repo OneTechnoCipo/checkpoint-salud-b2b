@@ -6,12 +6,14 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { prisma } from "./lib/prisma.js";
 import { autenticar, permitirRoles } from "./middlewares/auth.js";
+import { aptosRouter } from "./routes/aptos.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/aptos", aptosRouter); 
 
 // Ruta principal
 app.get("/", (_req, res) => {
@@ -227,59 +229,105 @@ app.get(
   },
 );
 
-// Registrar o actualizar Apto Medico
-app.post("/api/aptos", async (req, res) => {
+// Endpoint para obtener empresas
+app.get("/api/empresas", autenticar, permitirRoles("CLINICA", "ADMIN"), async (_req, res) => {
   try {
-    const { pacienteId, turnoId, estadoAptitud, detalleClinico, fechaEmision } = req.body;
-
-    if (!pacienteId || !estadoAptitud) {
-      return res.status(400).json({ error: "pacienteId y estadoAptitud son obligatorios" });
-    }
-
-    // 1. Obtener los meses de vigencia del puesto del paciente
-    const paciente = await prisma.paciente.findUnique({
-      where: { id: pacienteId },
-      include: { puesto: true },
+    const empresas = await prisma.empresa.findMany({
+      include: { pacientes: { select: { id: true } } }, // solo la cantidad, sin datos personales
     });
-
-    if (!paciente) {
-      return res.status(404).json({ error: "Paciente no encontrado" });
-    }
-
-    const emision = fechaEmision ? new Date(fechaEmision) : new Date();
-    const mesesVigencia = paciente.puesto.mesesVigencia;
-
-    // 2. Calcular la fecha de vencimiento sumando los meses del puesto
-    const vencimiento = new Date(emision);
-    vencimiento.setMonth(vencimiento.getMonth() + mesesVigencia);
-
-    // 3. Crear el registro en la tabla aptos_medicos
-    const apto = await prisma.aptoMedico.create({
-      data: {
-        pacienteId,
-        turnoId: turnoId || null,
-        estadoAptitud,
-        detalleClinico,
-        fechaEmision: emision,
-        fechaVencimiento: vencimiento,
+    res.json(empresas);
+  } catch {
+    res.status(500).json({ error: "Error al obtener empresas" });
+  }
+});
+// Endpoint para obtener turnos
+app.get("/api/turnos", autenticar, permitirRoles("CLINICA"), async (_req, res) => {
+  try {
+    const turnos = await prisma.turno.findMany({
+      include: {
+        paciente: {
+          include: { empresa: true },
+        },
+        sede: true,
       },
     });
 
-    // Si vino asociado a un turno, actualizar el estado del turno a ASISTIO
-    if (turnoId) {
-      await prisma.turno.update({
-        where: { id: turnoId },
-        data: { estado: "ASISTIO" },
-      });
+    res.json(turnos);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener turnos' });
+  }
+});
+
+// Endpoint para carga masiva de trabajadores
+app.post('/api/trabajadores/carga-masiva', autenticar, permitirRoles("CLINICA"), async (req, res) => {
+  try {
+    const { trabajadores } = req.body; // Espera un array de objetos { dni, nombre, apellido, cuitEmpresa, nombrePuesto }
+    
+    if (!Array.isArray(trabajadores) || trabajadores.length === 0) {
+      res.status(400).json({ error: "La lista de trabajadores está vacía o es inválida." });
+      return;
     }
 
-    return res.status(201).json({
-      mensaje: "Apto médico registrado correctamente",
-      apto,
+    let importados = 0;
+    const errores = [];
+
+    for (const [index, t] of trabajadores.entries()) {
+      try {
+        // Buscar la empresa por CUIT
+        const empresa = await prisma.empresa.findUnique({
+          where: { cuit: t.cuitEmpresa },
+        });
+
+        if (!empresa) {
+          errores.push(`Fila ${index + 1}: Empresa con CUIT ${t.cuitEmpresa} no encontrada.`);
+          continue;
+        }
+
+        // Buscar el puesto requerido para esa empresa
+        const puesto = await prisma.puestoRequisito.findFirst({
+          where: {
+            nombrePuesto: t.nombrePuesto,
+            empresaId: empresa.id,
+          },
+        });
+
+        if (!puesto) {
+          errores.push(`Fila ${index + 1}: Puesto "${t.nombrePuesto}" no registrado para la empresa.`);
+          continue;
+        }
+
+        // Crear o actualizar el paciente/trabajador
+        await prisma.paciente.upsert({
+          where: { dni: t.dni },
+          update: {
+            nombre: t.nombre,
+            apellido: t.apellido,
+            empresaId: empresa.id,
+            puestoId: puesto.id,
+          },
+          create: {
+            dni: t.dni,
+            nombre: t.nombre,
+            apellido: t.apellido,
+            empresaId: empresa.id,
+            puestoId: puesto.id,
+          },
+        });
+
+        importados++;
+      } catch (err: any) {
+        errores.push(`Fila ${index + 1}: Error al procesar DNI ${t.dni} (${err.message})`);
+      }
+    }
+
+    res.json({
+      mensaje: `Proceso finalizado. Se importaron ${importados} trabajadores correctamente.`,
+      totalErrores: errores.length,
+      detallesErrores: errores,
     });
-  } catch (error) {
-    console.error("Error al registrar apto médico:", error);
-    return res.status(500).json({ error: "Error interno al registrar el apto médico" });
+  } catch (error: any) {
+    console.error('Error en carga masiva:', error);
+    res.status(500).json({ error: 'Error interno en la carga masiva' });
   }
 });
 
