@@ -1,229 +1,158 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
-import { turnosMock } from '../../services/clinicaMock'
-import type { EstadoTurno } from '../../types/clinica'
+import { apiFetch } from '../../services/api'
 import { formatearFecha, formatearHora } from '../../utils/fechas'
 
-const filtroEstado = ref<EstadoTurno | 'TODOS'>('TODOS')
+interface TurnoApi {
+  id: string
+  fechaHora: string
+  estado: string
+  paciente?: {
+    nombre: string
+    apellido: string
+    dni: string
+    empresa?: { razonSocial: string }
+  }
+  sede?: { nombre: string }
+}
+
+const turnos = ref<TurnoApi[]>([])
+const cargando = ref(true)
+const error = ref('')
+const filtroEstado = ref<string>('TODOS')
 const busqueda = ref('')
 
-const turnos = computed(() => {
+async function cargarTurnos() {
+  try {
+    cargando.value = true
+    error.value = ''
+    turnos.value = await apiFetch<TurnoApi[]>('/api/turnos')
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'No se pudieron cargar los turnos.'
+  } finally {
+    cargando.value = false
+  }
+}
+
+onMounted(cargarTurnos)
+
+const turnosFiltrados = computed(() => {
   const texto = busqueda.value.trim().toLowerCase()
 
-  return turnosMock
-    .filter(
-      (turno) =>
-        filtroEstado.value === 'TODOS' ||
-        turno.estado === filtroEstado.value,
-    )
-    .filter(
-      (turno) =>
+  return turnos.value
+    .filter((turno) => {
+      const cumpleEstado = filtroEstado.value === 'TODOS' || turno.estado === filtroEstado.value
+      const pacienteNombre = `${turno.paciente?.nombre || ''} ${turno.paciente?.apellido || ''}`.toLowerCase()
+      const pacienteDni = turno.paciente?.dni || ''
+      const empresaNombre = turno.paciente?.empresa?.razonSocial || ''
+
+      const cumpleTexto =
         !texto ||
-        turno.paciente.toLowerCase().includes(texto) ||
-        turno.dni.includes(texto) ||
-        turno.empresa.toLowerCase().includes(texto),
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.fechaHora).getTime() -
-        new Date(b.fechaHora).getTime(),
-    )
+        pacienteNombre.includes(texto) ||
+        pacienteDni.includes(texto) ||
+        empresaNombre.toLowerCase().includes(texto)
+
+      return cumpleEstado && cumpleTexto
+    })
+    .sort((a, b) => a.fechaHora.localeCompare(b.fechaHora))
 })
 
-const etiquetas: Record<EstadoTurno, string> = {
+const etiquetas: Record<string, string> = {
   PENDIENTE: 'Pendiente',
   ASISTIO: 'Asistió',
   CANCELADO: 'Cancelado',
 }
 
-const estilos: Record<EstadoTurno, string> = {
+const estilos: Record<string, string> = {
   PENDIENTE: 'bg-amber-50 text-amber-700',
   ASISTIO: 'bg-emerald-50 text-emerald-700',
   CANCELADO: 'bg-red-50 text-red-700',
 }
-
-const filtros: {
-  valor: EstadoTurno | 'TODOS'
-  etiqueta: string
-}[] = [
-  { valor: 'TODOS', etiqueta: 'Todos' },
-  { valor: 'PENDIENTE', etiqueta: 'Pendientes' },
-  { valor: 'ASISTIO', etiqueta: 'Asistió' },
-  { valor: 'CANCELADO', etiqueta: 'Cancelados' },
-]
 </script>
 
 <template>
   <PanelPagina
-    titulo="Turnos solicitados"
-    descripcion="Agenda de turnos de la clínica."
+    titulo="Gestión de Turnos"
+    descripcion="Administrá la agenda y los turnos programados de la clínica."
   >
     <section class="mx-auto max-w-[1500px]">
+      <!-- Filtros y Búsqueda -->
+      <div class="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm text-slate-500">
+          Listado general de turnos vinculados en el sistema.
+        </p>
 
-    <!-- Filtros y cantidad -->
-     <div
-     class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-     >
-     
-     <!-- Filtro de estado -->
-      <div class="flex items-center gap-3">
-        <label
-        for="filtroEstado"
-        class="flex items-center gap-2 text-sm font-medium text-[#173b70]"
-        >
-        
-        <!-- Icono filtro -->
-         <span
-         class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e5f8fb] text-[#38b8cf]"
-         >
-         <svg
-          class="h-5 w-5"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-        >
-        <path d="M4 5h16" />
-        <path d="M7 12h10" />
-        <path d="M10 19h4" />
-       </svg>
-       </span>
+        <div class="flex flex-wrap items-center gap-3">
+          <input
+            v-model="busqueda"
+            type="text"
+            placeholder="Buscar por paciente o DNI..."
+            class="rounded-xl border border-[#dbe7ee] bg-white px-4 py-2 text-sm text-[#173b70] shadow-sm placeholder:text-slate-400 focus:border-[#38b8cf] focus:outline-none"
+          />
+          <select
+            v-model="filtroEstado"
+            class="rounded-xl border border-[#dbe7ee] bg-white px-4 py-2 text-sm font-medium text-[#173b70] shadow-sm focus:border-[#38b8cf] focus:outline-none"
+          >
+            <option value="TODOS">Todos los estados</option>
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="ASISTIO">Asistidos</option>
+            <option value="CANCELADO">Cancelados</option>
+          </select>
+        </div>
+      </div>
 
-      Estado
-    </label>
+      <!-- Listado de Turnos -->
+      <div class="rounded-2xl border border-[#dbe7ee] bg-white shadow-sm overflow-hidden">
+        <div v-if="cargando" class="p-8 text-center text-sm text-slate-500">
+          Cargando turnos desde el servidor...
+        </div>
 
-    <div class="relative">
-      <select
-        id="filtroEstado"
-        v-model="filtroEstado"
-        class="cursor-pointer appearance-none rounded-xl border border-[#dbe7ee] bg-white py-2.5 pl-4 pr-10 text-sm font-medium text-[#172033] shadow-sm outline-none transition focus:border-[#38b8cf] focus:ring-2 focus:ring-[#38b8cf]/10 hover:border-[#b8dce5]"
-      >
-      <option v-for="f in filtros" :key="f.valor" :value="f.valor">
-        {{ f.etiqueta }}
-      </option>
-    </select>
+        <div v-else-if="error" role="alert" class="p-8 text-center text-sm text-red-700">
+          {{ error }}
+        </div>
 
-      <!-- Flecha -->
-      <svg
-        class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-      >
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </div>
-  </div>
-  
-  <!-- Cantidad -->
-   <div
-    class="flex items-center gap-2 text-sm text-slate-500"
-    >
-    <span
-      class="rounded-full bg-[#e5f8fb] px-3 py-1 font-semibold text-[#168ca1]"
-    >
-      {{ turnos.length }}
-    </span>
+          <div v-else-if="error" role="alert" class="p-8 text-center text-sm text-red-700">
+          {{ error }}
+        </div>
 
-    <span>
-      {{ turnos.length === 1 ? 'turno encontrado' : 'turnos encontrados' }}
-    </span>
-  </div>
-</div>
+        <div v-else-if="turnosFiltrados.length === 0" class="p-8 text-center text-sm text-slate-500">
+          No se encontraron turnos con los filtros seleccionados.
+        </div>
 
-      <!-- Tabla -->
-      <div
-        class="overflow-hidden rounded-2xl border border-[#dbe7ee] bg-white shadow-sm"
-      >
-        <div class="overflow-x-auto">
-          <table class="w-full border-collapse text-left text-sm">
-
-            <!-- Encabezado -->
-            <thead
-              class="bg-[#f7fafc] text-xs uppercase tracking-wide text-slate-500"
-            >
-              <tr>
-                <th class="px-5 py-4 font-semibold">Fecha</th>
-                <th class="px-5 py-4 font-semibold">Hora</th>
-                <th class="px-5 py-4 font-semibold">Paciente</th>
-                <th class="px-5 py-4 font-semibold">DNI</th>
-                <th class="px-5 py-4 font-semibold">Empresa</th>
-                <th class="px-5 py-4 font-semibold">Sede</th>
-                <th class="px-5 py-4 font-semibold">Estado</th>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-[#dbe7ee] bg-[#f9fcfd] text-xs font-semibold text-[#173b70]">
+                <th class="px-5 py-4">Paciente</th>
+                <th class="px-5 py-4">DNI</th>
+                <th class="px-5 py-4">Empresa</th>
+                <th class="px-5 py-4">Fecha y Hora</th>
+                <th class="px-5 py-4">Sede</th>
+                <th class="px-5 py-4">Estado</th>
               </tr>
             </thead>
-
-            <tbody>
-              <tr
-                v-for="turno in turnos"
-                :key="turno.id"
-                class="border-t border-[#edf1f5] transition-colors hover:bg-[#f9fcfd]"
-              >
-                <!-- Fecha -->
-                <td class="whitespace-nowrap px-5 py-4 text-slate-600">
-                  {{ formatearFecha(turno.fechaHora) }}
+            <tbody class="divide-y divide-[#edf1f5] text-sm">
+              <tr v-for="turno in turnosFiltrados" :key="turno.id" class="hover:bg-[#f9fcfd]/60 transition-colors">
+                <td class="px-5 py-4 font-semibold text-[#173b70]">
+                  {{ turno.paciente?.apellido }}, {{ turno.paciente?.nombre }}
                 </td>
-
-                <!-- Hora -->
-                <td class="whitespace-nowrap px-5 py-4 text-slate-600">
-                  {{ formatearHora(turno.fechaHora) }} hs
-                </td>
-
-                <!-- Paciente -->
-                <td
-                  class="whitespace-nowrap px-5 py-4 font-semibold text-[#173b70]"
-                >
-                  {{ turno.paciente }}
-                </td>
-
-                <!-- DNI -->
-                <td class="whitespace-nowrap px-5 py-4 text-slate-600">
-                  {{ turno.dni }}
-                </td>
-
-                <!-- Empresa -->
+                <td class="px-5 py-4 text-slate-600">{{ turno.paciente?.dni || 'N/A' }}</td>
+                <td class="px-5 py-4 text-slate-600">{{ turno.paciente?.empresa?.razonSocial || 'N/A' }}</td>
                 <td class="px-5 py-4 text-slate-600">
-                  {{ turno.empresa }}
+                  {{ formatearFecha(turno.fechaHora) }} - {{ formatearHora(turno.fechaHora) }} hs
                 </td>
-
-                <!-- Sede -->
-                <td class="px-5 py-4 text-slate-600">
-                  {{ turno.sede }}
-                </td>
-
-                <!-- Estado -->
-                <td class="whitespace-nowrap px-5 py-4">
-                  <span
-                    class="inline-block rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="estilos[turno.estado]"
-                  >
-                    {{ etiquetas[turno.estado] }}
+                <td class="px-5 py-4 text-slate-600">{{ turno.sede?.nombre || 'Central' }}</td>
+                <td class="px-5 py-4">
+                  <span :class="['rounded-full px-2.5 py-1 text-xs font-semibold', estilos[turno.estado as string] || 'bg-slate-100 text-slate-700']">
+                    {{ etiquetas[turno.estado as string] || turno.estado }}
                   </span>
-                </td>
-              </tr>
-
-              <!-- Sin resultados -->
-              <tr v-if="turnos.length === 0">
-                <td
-                  colspan="7"
-                  class="px-5 py-12 text-center"
-                >
-                  <p class="font-semibold text-[#173b70]">
-                    No encontramos turnos
-                  </p>
-
-                  <p class="mt-1 text-sm text-slate-500">
-                    Probá cambiando el filtro o la búsqueda.
-                  </p>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-
     </section>
   </PanelPagina>
 </template>

@@ -1,294 +1,200 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
+import { apiFetch } from '../../services/api.ts'
 
-const EXTENSIONES = ['.xlsx', '.csv']
+const archivoSeleccionado = ref<File | null>(null)
+const contenidoPrevio = ref<string>('')
+const mostrarVistaPrevia = ref(false) // <-- Aquí está declarada correctamente
+const cargando = ref(false)
+const resultadoMensaje = ref('')
+const errorMensaje = ref('')
+const detallesErrores = ref<string[]>([])
 
-const archivo = ref<File | null>(null)
-const error = ref('')
-const aviso = ref('')
-
-const archivosCargados = [
-  {
-    id: 1,
-    nombre: 'nomina_petrolera_andina.xlsx',
-    empresa: 'Petrolera Andina S.A.',
-    trabajadores: 42,
-    fecha: '30/10/2026',
-    estado: 'Procesado',
-  },
-  {
-    id: 2,
-    nombre: 'trabajadores_patagonia.csv',
-    empresa: 'Servicios Patagonia S.R.L.',
-    trabajadores: 27,
-    fecha: '28/10/2026',
-    estado: 'Procesado',
-  },
-  {
-    id: 3,
-    nombre: 'nomina_transportes_sur.xlsx',
-    empresa: 'Transportes del Sur S.A.',
-    trabajadores: 18,
-    fecha: '25/10/2026',
-    estado: 'Procesado',
-  },
-]
-
-const tamano = computed(() => {
-  if (!archivo.value) return ''
-
-  const kb = archivo.value.size / 1024
-
-  return kb < 1024
-    ? `${Math.round(kb)} KB`
-    : `${(kb / 1024).toFixed(1)} MB`
-})
-
-function elegirArchivo(evento: Event) {
-  const entrada = evento.target as HTMLInputElement
-  const elegido = entrada.files?.[0] ?? null
-
-  archivo.value = null
-  error.value = ''
-  aviso.value = ''
-
-  if (!elegido) return
-
-  const nombre = elegido.name.toLowerCase()
-
-  if (!EXTENSIONES.some((ext) => nombre.endsWith(ext))) {
-    error.value = 'El archivo tiene que ser .xlsx o .csv.'
-    entrada.value = ''
-    return
-  }
-
-  archivo.value = elegido
+interface ArchivoHistorial {
+  nombre: string
+  fecha: string
+  registros: number
+  estado: 'Éxito' | 'Con advertencias'
+  contenidoRaw: string
 }
 
-function procesar() {
-  if (!archivo.value) {
-    error.value = 'Elegí un archivo antes de procesar.'
+interface RespuestaCarga {
+  mensaje: string
+  totalErrores: number
+  detallesErrores?: string[]
+}
+
+const archivosHistorial = ref<ArchivoHistorial[]>([])
+
+function manejarSeleccion(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    const file = target.files[0]
+    archivoSeleccionado.value = file
+    resultadoMensaje.value = ''
+    errorMensaje.value = ''
+    detallesErrores.value = []
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      contenidoPrevio.value = (e.target?.result as string) || ''
+    }
+    reader.readAsText(file)
+  }
+}
+
+async function procesarArchivo() {
+  if (!archivoSeleccionado.value) {
+    errorMensaje.value = 'Por favor, seleccioná un archivo CSV primero.'
     return
   }
 
-  error.value = ''
-  aviso.value =
-    'La importación todavía no está disponible. Se implementará más adelante.'
+  const nombreArchivo = archivoSeleccionado.value.name
+  const rawData = contenidoPrevio.value
+  cargando.value = true
+  resultadoMensaje.value = ''
+  errorMensaje.value = ''
+  detallesErrores.value = []
+
+  try {
+    const lineas = rawData.split(/\r\n|\n/).filter((linea) => linea.trim() !== '')
+
+    if (lineas.length < 2) {
+      throw new Error('El archivo CSV está vacío o no contiene registros.')
+    }
+
+    const cabeceras = lineas[0].split(',').map((c) => c.trim().replace(/^["']|["']$/g, ''))
+    const trabajadores: Record<string, string>[] = []
+
+    for (let i = 1; i < lineas.length; i++) {
+      const valores = lineas[i].split(',').map((v) => v.trim().replace(/^["']|["']$/g, ''))
+      const obj: Record<string, string> = {}
+
+      cabeceras.forEach((cabecera, index) => {
+        obj[cabecera] = valores[index] || ''
+      })
+
+      trabajadores.push(obj)
+    }
+
+    const data = await apiFetch<RespuestaCarga>('/api/trabajadores/carga-masiva', {
+      method: 'POST',
+      body: JSON.stringify({ trabajadores }),
+    })
+
+    resultadoMensaje.value = data.mensaje
+    detallesErrores.value = data.detallesErrores ?? []
+
+    archivosHistorial.value.unshift({
+      nombre: nombreArchivo,
+      fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      registros: trabajadores.length,
+      estado: data.totalErrores > 0 ? 'Con advertencias' : 'Éxito',
+      contenidoRaw: rawData,
+    })
+
+    archivoSeleccionado.value = null
+    contenidoPrevio.value = ''
+    mostrarVistaPrevia.value = false
+  } catch (err) {
+    errorMensaje.value = err instanceof Error ? err.message : 'No se pudo importar el archivo.'
+  } finally {
+    cargando.value = false
+  }
 }
 </script>
 
 <template>
   <PanelPagina
-    titulo="Carga masiva"
-    descripcion="Importá la nómina de trabajadores de una empresa."
+    titulo="Carga Masiva de Trabajadores"
+    descripcion="Importación mediante planilla CSV para la clínica ocupacional."
   >
-    <section class="mx-auto max-w-[1500px]">
+    <section class="mx-auto max-w-[1300px]">
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- Panel principal de carga -->
+        <div class="lg:col-span-2 rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm">
+          <p class="text-sm h-10 text-slate-500 mb-6">
+            Cargá el archivo con la nómina de trabajadores para asociarlos a sus respectivas empresas y puestos.
+          </p>
 
-      <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-
-        <!-- CARGAR ARCHIVO -->
-        <section
-          class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm"
-        >
-          <div class="mb-5">
-            <h3 class="text-lg font-bold text-[#173b70]">
-              Cargar archivo
-            </h3>
-
-            <p class="mt-1 text-sm text-slate-500">
-              Seleccioná la nómina que querés importar.
+          <!-- Dropzone / Selector de archivo -->
+          <div class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#dbe7ee] bg-[#f9fcfd] p-8 text-center transition hover:border-[#173b70]/50">
+            <svg class="mb-3 h-10 w-10 text-[#173b70]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p class="mb-1 h-10 text-sm font-semibold text-[#173b70]">
+              {{ archivoSeleccionado ? archivoSeleccionado.name : 'Arrastrá tu archivo CSV aquí o hacé clic para buscar' }}
             </p>
+            
+            <label class="cursor-pointer rounded-xl bg-[#173b70] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#122d56]">
+              Examinar archivos
+              <input type="file" accept=".csv" @change="manejarSeleccion" class="hidden" />
+            </label>
           </div>
 
-          <!-- Zona para seleccionar archivo -->
-          <label
-            class="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#b8c4d6] bg-[#f9fcfd] px-6 py-12 text-center transition-colors hover:border-[#38b8cf] focus-within:border-[#38b8cf]"
-          >
-            <!-- Icono -->
-            <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5f8fb] text-[#38b8cf]"
+          <!-- Botón de acción principal -->
+          <div class="mt-6 flex justify-end">
+            <button
+              @click="procesarArchivo"
+              :disabled="cargando || !archivoSeleccionado"
+              class="rounded-xl border border-[#173b70] bg-[#173b70] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#122d56] disabled:opacity-50"
             >
-              <svg
-                class="h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
-                <path d="M12 16V4" />
-                <path d="m7 9 5-5 5 5" />
-                <path d="M5 14v5h14v-5" />
-              </svg>
-            </div>
+              {{ cargando ? 'Importando registros...' : 'Procesar e Importar' }}
+            </button>
+          </div>
 
-            <span class="text-sm font-semibold text-[#173b70]">
-              Elegí un archivo para cargar
-            </span>
+          <!-- Mensajes de feedback -->
+          <div v-if="resultadoMensaje" class="mt-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm font-medium text-emerald-800">
+            ✓ {{ resultadoMensaje }}
+          </div>
 
-            <span class="mt-1 text-xs text-slate-500">
-              Formatos admitidos: .xlsx y .csv
-            </span>
+          <div v-if="detallesErrores.length > 0" class="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+            <p class="font-semibold mb-1">Advertencias durante la importación:</p>
+            <ul class="list-disc list-inside space-y-1 text-xs">
+              <li v-for="(err, index) in detallesErrores" :key="index">{{ err }}</li>
+            </ul>
+          </div>
 
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              class="sr-only"
-              @change="elegirArchivo"
-            />
-          </label>
+          <div v-if="errorMensaje" class="mt-6 rounded-xl bg-red-50 border border-red-200 p-4 text-sm font-medium text-red-700">
+            ⚠ {{ errorMensaje }}
+          </div>
+        </div>
 
-          <!-- Archivo seleccionado -->
-          <div
-            v-if="archivo"
-            class="mt-4 flex items-center gap-3 rounded-xl border border-[#dbe7ee] bg-[#f9fcfd] p-4"
-          >
-            <div
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e5f8fb] text-[#38b8cf]"
+        <!-- Panel lateral: Historial de archivos cargados -->
+        <div class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm flex flex-col">
+          <h3 class="text-base font-semibold text-[#173b70] mb-3">Archivos Procesados</h3>
+          <p class="text-xs h-10 text-slate-500 mb-4">
+            Listado de planillas importadas en la sesión actual:
+          </p>
+
+          <div v-if="archivosHistorial.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-[#dbe7ee] rounded-xl bg-[#f9fcfd]">
+            <p class="text-xs text-slate-400">Todavía no se cargaron archivos en esta sesión.</p>
+          </div>
+
+          <div v-else class="space-y-3 overflow-y-auto max-h-[350px]">
+            <div 
+              v-for="(archivo, index) in archivosHistorial" 
+              :key="index"
+              class="rounded-xl border border-[#dbe7ee] bg-[#f9fcfd] p-3 text-xs flex flex-col gap-2 shadow-xs"
             >
-              <svg
-                class="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
-                <path d="M6 2h8l4 4v16H6z" />
-                <path d="M14 2v5h5" />
-              </svg>
-            </div>
-
-            <div class="min-w-0">
-              <p
-                class="truncate text-sm font-semibold text-[#173b70]"
-              >
-                {{ archivo.name }}
-              </p>
-
-              <p class="mt-0.5 text-xs text-slate-500">
-                {{ tamano }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Error -->
-          <div
-            v-if="error"
-            role="alert"
-            class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700"
-          >
-            {{ error }}
-          </div>
-
-          <!-- Aviso -->
-          <div
-            v-if="aviso"
-            role="status"
-            class="mt-4 rounded-lg bg-[#f4f6fa] px-4 py-3 text-sm text-slate-600"
-          >
-            {{ aviso }}
-          </div>
-
-          <!-- Botón -->
-          <button
-            type="button"
-            class="mt-5 cursor-pointer rounded-lg border-0 bg-[#173b70] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#24518f]"
-            @click="procesar"
-          >
-            Procesar archivo
-          </button>
-        </section>
-
-        <!-- ARCHIVOS CARGADOS -->
-        <section
-          class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm"
-        >
-          <div class="mb-5 flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-bold text-[#173b70]">
-                Archivos cargados
-              </h3>
-
-              <p class="mt-1 text-sm text-slate-500">
-                Últimas nóminas importadas.
-              </p>
-            </div>
-
-            <span
-              class="rounded-full bg-[#e5f8fb] px-3 py-1 text-xs font-semibold text-[#168ca1]"
-            >
-              {{ archivosCargados.length }}
-            </span>
-          </div>
-
-          <!-- Lista -->
-          <div class="space-y-3">
-            <article
-              v-for="item in archivosCargados"
-              :key="item.id"
-              class="rounded-xl border border-[#edf1f5] bg-[#f9fcfd] p-4"
-            >
-              <div class="flex items-start gap-3">
-
-                <!-- Icono archivo -->
-                <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e5f8fb] text-[#38b8cf]"
-                >
-                  <svg
-                    class="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                  >
-                    <path d="M6 2h8l4 4v16H6z" />
-                    <path d="M14 2v5h5" />
-                    <path d="M9 13h6M9 17h6" />
-                  </svg>
-                </div>
-
-                <!-- Información -->
-                <div class="min-w-0 flex-1">
-                  <div
-                    class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
-                  >
-                    <div class="min-w-0">
-                      <p
-                        class="truncate text-sm font-semibold text-[#173b70]"
-                      >
-                        {{ item.nombre }}
-                      </p>
-
-                      <p class="mt-1 text-xs text-slate-500">
-                        {{ item.empresa }}
-                      </p>
-                    </div>
-
-                    <!-- Estado -->
-                    <span
-                      class="w-fit shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700"
-                    >
-                      {{ item.estado }}
-                    </span>
-                  </div>
-
-                  <div
-                    class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500"
-                  >
-                    <span>
-                      {{ item.trabajadores }} trabajadores
-                    </span>
-
-                    <span>
-                      {{ item.fecha }}
-                    </span>
-                  </div>
-                </div>
+              <div class="flex items-center justify-between font-semibold text-[#173b70]">
+                <span class="truncate max-w-[160px]" :title="archivo.nombre">📄 {{ archivo.nombre }}</span>
+                <span :class="archivo.estado === 'Éxito' ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full' : 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full'">
+                  {{ archivo.estado }}
+                </span>
               </div>
-            </article>
+              <div class="flex items-center justify-between text-[11px] text-slate-500">
+                <span>{{ archivo.registros }} registros</span>
+                <span>{{ archivo.fecha }}</span>
+              </div>
+              <details class="mt-1 text-[11px] text-[#168ca1] cursor-pointer">
+                <summary class="hover:underline font-medium">Ver contenido CSV</summary>
+                <pre class="mt-2 max-h-24 overflow-y-auto text-[10px] font-mono text-slate-600 bg-white p-2 rounded border border-[#dbe7ee] whitespace-pre-wrap">{{ archivo.contenidoRaw }}</pre>
+              </details>
+            </div>
           </div>
-        </section>
-
+        </div>
       </div>
     </section>
   </PanelPagina>
