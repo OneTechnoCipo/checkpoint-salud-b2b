@@ -227,6 +227,62 @@ app.get(
   },
 );
 
+// Registrar o actualizar Apto Medico
+app.post("/api/aptos", async (req, res) => {
+  try {
+    const { pacienteId, turnoId, estadoAptitud, detalleClinico, fechaEmision } = req.body;
+
+    if (!pacienteId || !estadoAptitud) {
+      return res.status(400).json({ error: "pacienteId y estadoAptitud son obligatorios" });
+    }
+
+    // 1. Obtener los meses de vigencia del puesto del paciente
+    const paciente = await prisma.paciente.findUnique({
+      where: { id: pacienteId },
+      include: { puesto: true },
+    });
+
+    if (!paciente) {
+      return res.status(404).json({ error: "Paciente no encontrado" });
+    }
+
+    const emision = fechaEmision ? new Date(fechaEmision) : new Date();
+    const mesesVigencia = paciente.puesto.mesesVigencia;
+
+    // 2. Calcular la fecha de vencimiento sumando los meses del puesto
+    const vencimiento = new Date(emision);
+    vencimiento.setMonth(vencimiento.getMonth() + mesesVigencia);
+
+    // 3. Crear el registro en la tabla aptos_medicos
+    const apto = await prisma.aptoMedico.create({
+      data: {
+        pacienteId,
+        turnoId: turnoId || null,
+        estadoAptitud,
+        detalleClinico,
+        fechaEmision: emision,
+        fechaVencimiento: vencimiento,
+      },
+    });
+
+    // Si vino asociado a un turno, actualizar el estado del turno a ASISTIO
+    if (turnoId) {
+      await prisma.turno.update({
+        where: { id: turnoId },
+        data: { estado: "ASISTIO" },
+      });
+    }
+
+    return res.status(201).json({
+      mensaje: "Apto médico registrado correctamente",
+      apto,
+    });
+  } catch (error) {
+    console.error("Error al registrar apto médico:", error);
+    return res.status(500).json({ error: "Error interno al registrar el apto médico" });
+  }
+});
+
 // Iniciar servidor
 app.listen(PORT, () => {
   console.log(`Servidor de CheckPoint Salud en http://localhost:${PORT}`);
