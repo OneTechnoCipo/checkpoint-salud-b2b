@@ -1,34 +1,106 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import PanelPagina from '../components/PanelPagina.vue'
-import { empresasMock, turnosMock } from '../services/clinicaMock'
 import { formatearFecha, formatearHora } from '../utils/fechas'
+import { apiFetch } from '../services/api'
+
+// Estados reactivos reales
+const empresas = ref<any[]>([])
+const turnos = ref<any[]>([])
+const cargando = ref(true)
+
+// Estado para el formulario de registro de aptos con soporte para archivo PDF
+const turnoActual = ref<any | null>(null)
+const estadoAptitud = ref('APTO_CON_OBSERVACIONES')
+const detalleClinico = ref('')
+const archivoDocumento = ref<File | null>(null)
+const guardando = ref(false)
+
+// Cargar datos al montar la vista usando apiFetch centralizado
+async function cargarDatos() {
+  try {
+    cargando.value = true
+
+    // apiFetch inyecta automáticamente el token y maneja sesiones vencidas
+    const [resTurnos, resEmpresas] = await Promise.all([
+      apiFetch<any[]>('/api/turnos'),
+      apiFetch<any[]>('/api/empresas')
+    ])
+
+    turnos.value = resTurnos || []
+    empresas.value = resEmpresas || []
+  } catch (error) {
+    console.error('Error al conectar con el backend:', error)
+  } finally {
+    cargando.value = false
+  }
+}
+
+onMounted(() => {
+  cargarDatos()
+})
+
+function manejarArchivo(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    archivoDocumento.value = target.files[0]
+  }
+}
+
+// Función para registrar el apto médico usando apiFetch con FormData (Multer)
+async function registrarAptoMedico() {
+  if (!turnoActual.value) return
+
+  try {
+    guardando.value = true
+
+    const formData = new FormData()
+    formData.append('pacienteId', turnoActual.value.pacienteId)
+    formData.append('turnoId', String(turnoActual.value.id))
+    formData.append('estadoAptitud', estadoAptitud.value)
+    formData.append('detalleClinico', detalleClinico.value)
+    
+    if (archivoDocumento.value) {
+      formData.append('documento', archivoDocumento.value)
+    }
+
+    // apiFetch maneja de forma inteligente que si el body es FormData, NO agregará Content-Type JSON
+    await apiFetch('/api/aptos', {
+      method: 'POST',
+      body: formData,
+    })
+
+    alert('¡Apto médico registrado con éxito y fecha de vencimiento calculada!')
+    turnoActual.value = null
+    detalleClinico.value = ''
+    archivoDocumento.value = null
+    cargarDatos() // Refrescar lista y tarjetas
+  } catch (error: any) {
+    console.error('Error al registrar:', error)
+    alert('Error al registrar: ' + (error.message || 'Desconocido'))
+  } finally {
+    guardando.value = false
+  }
+}
 
 const turnosPendientes = computed(() =>
-  turnosMock.filter((turno) => turno.estado === 'PENDIENTE'),
+  turnos.value.filter((turno) => turno.estado === 'PENDIENTE'),
 )
 
 const proximosTurnos = computed(() =>
-  turnosMock
-    .filter((turno) => turno.estado === 'PENDIENTE')
-    .sort(
-      (a, b) =>
-        new Date(a.fechaHora).getTime() -
-        new Date(b.fechaHora).getTime(),
-    )
-    .slice(0, 4),
+  turnosPendientes.value.slice(0, 4),
 )
 
 const tarjetas = computed(() => [
   {
     titulo: 'Empresas',
-    valor: empresasMock.length,
+    valor: empresas.value.length,
     descripcion: 'Empresas atendidas por la clínica.',
     icono: 'empresa',
   },
   {
     titulo: 'Turnos',
-    valor: turnosMock.length,
+    valor: turnos.value.length,
     descripcion: 'Turnos registrados en la agenda.',
     icono: 'turno',
   },
@@ -56,7 +128,6 @@ const tarjetas = computed(() => [
 
       <!-- Bienvenida -->
       <div class="mb-7">
-
         <p class="text-sm text-slate-500">
           Desde aquí podés consultar la actividad de la clínica,
           gestionar empresas y revisar los turnos programados.
@@ -72,209 +143,113 @@ const tarjetas = computed(() => [
         >
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="mb-1 text-sm text-slate-500">
-                {{ tarjeta.titulo }}
-              </p>
-
-              <p class="text-3xl font-bold text-[#173b70]">
-                {{ tarjeta.valor }}
-              </p>
+              <p class="mb-1 text-sm text-slate-500">{{ tarjeta.titulo }}</p>
+              <p class="text-3xl font-bold text-[#173b70]">{{ tarjeta.valor }}</p>
             </div>
-
-            <div
-              class="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5f8fb] text-[#38b8cf]"
-            >
-              <!-- Empresa -->
-              <svg
-                v-if="tarjeta.icono === 'empresa'"
-                class="h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
-                <path d="M4 21V7l8-4 8 4v14" />
-                <path d="M9 21v-5h6v5" />
-                <path d="M8 9h1M15 9h1M8 12h1M15 12h1" />
-              </svg>
-
-              <!-- Turno -->
-              <svg
-                v-else-if="tarjeta.icono === 'turno'"
-                class="h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5f8fb] text-[#38b8cf]">
+              <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
                 <rect x="3" y="4" width="18" height="17" rx="2" />
                 <path d="M16 2v4M8 2v4M3 10h18" />
-                <path d="M8 14h2M14 14h2M8 17h2" />
-              </svg>
-
-              <!-- Pendiente -->
-              <svg
-                v-else-if="tarjeta.icono === 'pendiente'"
-                class="h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-
-              <!-- Próximo -->
-              <svg
-                v-else
-                class="h-6 w-6"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-              >
-                <path d="M5 12h14" />
-                <path d="m13 6 6 6-6 6" />
               </svg>
             </div>
           </div>
-
-          <p class="mt-4 text-xs leading-relaxed text-slate-500">
-            {{ tarjeta.descripcion }}
-          </p>
+          <p class="mt-4 text-xs leading-relaxed text-slate-500">{{ tarjeta.descripcion }}</p>
         </article>
       </div>
 
-      <!-- Contenido inferior -->
-      <div class="mt-7 grid grid-cols-1 gap-6 xl:grid-cols-2">
-
-        <!-- Empresas -->
-        <section
-          class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm"
-        >
+      <!-- Próximos turnos con opción de evaluar -->
+      <div class="mt-7">
+        <section class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm">
           <div class="mb-5 flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-bold text-[#173b70]">
-                Empresas atendidas
-              </h3>
-
-              <p class="mt-1 text-sm text-slate-500">
-                Empresas registradas en la clínica.
-              </p>
-            </div>
-
-            <span
-              class="rounded-full bg-[#e5f8fb] px-3 py-1 text-xs font-semibold text-[#168ca1]"
-            >
-              {{ empresasMock.length }}
-            </span>
+            <h3 class="text-lg font-bold text-[#173b70]">Próximos turnos a evaluar</h3>
           </div>
 
-          <div class="space-y-3">
-            <article
-              v-for="empresa in empresasMock"
-              :key="empresa.id"
-              class="flex items-center justify-between gap-4 rounded-xl border border-[#edf1f5] bg-[#f9fcfd] px-4 py-3"
-            >
-              <div class="flex min-w-0 items-center gap-3">
-                <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e5f8fb] text-[#38b8cf]"
-                >
-                  <svg
-                    class="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                  >
-                    <path d="M4 21V7l8-4 8 4v14" />
-                    <path d="M9 21v-5h6v5" />
-                    <path d="M8 9h1M15 9h1M8 12h1M15 12h1" />
-                  </svg>
-                </div>
+          <div v-if="cargando" class="text-sm text-slate-500 py-4">Cargando turnos...</div>
+          <div v-else-if="proximosTurnos.length === 0" class="text-sm text-slate-500 py-4">No hay turnos pendientes.</div>
 
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-[#173b70]">
-                    {{ empresa.razonSocial }}
-                  </p>
-
-                  <p class="mt-0.5 text-xs text-slate-500">
-                    {{ empresa.trabajadores }} trabajadores
-                  </p>
-                </div>
-              </div>
-
-              <span class="shrink-0 text-xs text-slate-400">
-                {{ empresa.cuit }}
-              </span>
-            </article>
-          </div>
-        </section>
-
-        <!-- Próximos turnos -->
-        <section
-          class="rounded-2xl border border-[#dbe7ee] bg-white p-6 shadow-sm"
-        >
-          <div class="mb-5">
-            <h3 class="text-lg font-bold text-[#173b70]">
-              Próximos turnos
-            </h3>
-
-            <p class="mt-1 text-sm text-slate-500">
-              Turnos pendientes de atención.
-            </p>
-          </div>
-
-          <div class="space-y-3">
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <article
               v-for="turno in proximosTurnos"
               :key="turno.id"
-              class="rounded-xl border border-[#edf1f5] bg-[#f9fcfd] p-4"
+              class="rounded-xl border border-[#edf1f5] bg-[#f9fcfd] p-4 flex flex-col justify-between"
             >
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <p class="text-sm font-semibold text-[#173b70]">
-                    {{ turno.paciente }}
-                  </p>
-
-                  <p class="mt-1 text-xs text-slate-500">
-                    {{ turno.empresa }}
-                  </p>
+              <div>
+                <div class="flex items-start justify-between gap-4">
+                  <p class="text-sm font-semibold text-[#173b70]">{{ turno.paciente?.nombre || 'Paciente' }} {{ turno.paciente?.apellido || '' }}</p>
+                  <span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    {{ turno.estado }}
+                  </span>
                 </div>
-
-                <span
-                  class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"
-                >
-                  Pendiente
-                </span>
+                <p class="mt-1 text-xs text-slate-500">DNI: {{ turno.paciente?.dni || 'N/A' }}</p>
               </div>
 
-              <div
-                class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500"
-              >
-                <span>
-                  {{ formatearFecha(turno.fechaHora) }}
-                </span>
-
-                <span>
-                  {{ formatearHora(turno.fechaHora) }} hs
-                </span>
-
-                <span>
-                  {{ turno.sede }}
-                </span>
+              <div class="mt-4 flex items-center justify-between">
+                <span class="text-xs text-slate-500">{{ formatearFecha(turno.fechaHora) }} - {{ formatearHora(turno.fechaHora) }} hs</span>
+                <button
+                  @click="turnoActual = turno"
+                  class="rounded-lg border border-[#173b70] bg-[#173b70] px-4 py-2 text-xs font-semibold text-white hover:bg-[#122d56] transition-colors"
+                >
+                  Registrar Apto
+                </button>
               </div>
             </article>
-
-            <div
-              v-if="proximosTurnos.length === 0"
-              class="rounded-xl border border-dashed border-[#dce2eb] px-5 py-8 text-center text-sm text-slate-500"
-            >
-              No hay próximos turnos pendientes.
-            </div>
           </div>
         </section>
+      </div>
+
+      <!-- Modal / Formulario flotante para CHK-15 con Multer PDF -->
+      <div v-if="turnoActual" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+          <h3 class="text-lg font-bold text-[#173b70] mb-4">Registrar Apto Médico</h3>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Estado de Aptitud</label>
+              <select v-model="estadoAptitud" class="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option value="APTO">Apto</option>
+                <option value="APTO_CON_OBSERVACIONES">Apto con Observaciones</option>
+                <option value="NO_APTO">No Apto</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Detalle Clínico / Observaciones</label>
+              <textarea
+                v-model="detalleClinico"
+                rows="3"
+                placeholder="Indique restricciones, observaciones o motivos..."
+                class="w-full rounded-lg border border-slate-300 p-2 text-sm"
+              ></textarea>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Certificado PDF Adjunto</label>
+              <input
+                type="file"
+                accept=".pdf"
+                @change="manejarArchivo"
+                class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#173b70] file:text-white hover:file:bg-[#122d56] cursor-pointer"
+              />
+              <span class="text-[11px] text-slate-400 mt-1 block">Máximo 5 MB. Formato PDF obligatorio.</span>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+              <button
+                @click="turnoActual = null"
+                class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                @click="registrarAptoMedico"
+                :disabled="guardando"
+                class="rounded-lg border border-[#173b70] bg-[#173b70] px-5 py-2 text-sm font-semibold text-white hover:bg-[#122d56] disabled:opacity-50"
+              >
+                {{ guardando ? 'Guardando...' : 'Guardar y Calcular Vencimiento' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </PanelPagina>

@@ -22,6 +22,7 @@ enum EstadoTurno {
 
 enum EstadoAptitud {
   APTO
+  APTO_CON_OBSERVACIONES
   NO_APTO
   PENDIENTE
 }
