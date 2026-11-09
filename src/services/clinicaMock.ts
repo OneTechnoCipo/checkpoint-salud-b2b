@@ -1,5 +1,4 @@
-import { AptoPorVencer } from '../types/clinica';
-
+import type { AptoPorVencer } from '../types/clinica';
 // Función auxiliar para calcular fechas relativas exactas a partir de hoy
 const calcularFechaVencimiento = (diasOffset: number): string => {
   const fecha = new Date();
@@ -129,7 +128,9 @@ export const aptosPorVencerMock: AptoPorVencer[] = [
   },
 ];
 
-// Servicio mock para consumir en las vistas o componentes
-export const obtenerAptosPorVencer = async (): Promise<AptoPorVencer[]> => {
-  return Promise.resolve(aptosPorVencerMock);
+// Objeto agrupador que espera el componente en su importación
+export const clinicaMock = {
+  getAptosPorVencer: async (): Promise<AptoPorVencer[]> => {
+    return Promise.resolve(aptosPorVencerMock);
+  },
 };
