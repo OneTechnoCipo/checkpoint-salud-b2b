@@ -46,7 +46,8 @@ const router = createRouter({
         {
           path: 'aptos',
           name: 'clinica-aptos',
-          component: () => import('../views/EnDesarrolloView.vue'),
+          // Corregido para que apunte directamente a tu componente de aptos y vencimientos
+          component: () => import('../views/clinica/AptosVencimientoView.vue'),
           props: { titulo: 'Aptos y vencimientos' },
         },
         {
@@ -98,20 +99,18 @@ const router = createRouter({
       component: () => import('../views/AdminView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN'] },
     },
-     {
-  path: '/paciente',
-  name: 'paciente',
-  component: () => import('../views/PacienteView.vue'),
-  meta: {requiresAuth: true,roles: ['PACIENTE'],
-  },
-},
+    {
+      path: '/paciente',
+      name: 'paciente',
+      component: () => import('../views/PacienteView.vue'),
+      meta: { requiresAuth: true, roles: ['PACIENTE'] },
+    },
     {
       path: '/acceso-denegado',
       name: 'acceso-denegado',
       component: () => import('../views/AccesoDenegadoView.vue'),
       meta: { requiresAuth: true },
     },
-  
   ],
 })
 
