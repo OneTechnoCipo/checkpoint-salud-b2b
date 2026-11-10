@@ -204,7 +204,7 @@ aptosRouter.post(
         const creado = await tx.aptoMedico.create({
           data: {
             pacienteId,
-            estadoAptitud: resultado,
+            EstadoAptitud: resultado,
             fechaEmision: examen,
             fechaVencimiento: resultado === "NO_APTO" ? null : sumarMeses(examen, vigencia),
             detalleClinico: observaciones || null,
@@ -274,7 +274,11 @@ aptosRouter.get(
       res.status(500).json({ mensaje: "No se pudo obtener el documento." });
     }
   },
+
 );
+
+
+// Consultar el último apto médico del paciente autenticado.
 
 
 // Consultar el último apto médico del paciente autenticado.

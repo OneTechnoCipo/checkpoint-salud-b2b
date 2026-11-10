@@ -11,6 +11,7 @@
     "create-empresa": "tsx src/scripts/create-empresa.ts",
     "seed-demo": "tsx src/scripts/seed-demo.ts",
     "db:seed": "prisma db seed"
+
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

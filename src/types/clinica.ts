@@ -1,20 +1,25 @@
-export type EstadoTurno = 'PENDIENTE' | 'ASISTIO' | 'CANCELADO'
+export type EstadoAptitud = 'APTO' | 'APTO_CON_OBSERVACIONES' | 'NO_APTO' | 'PENDIENTE';
 
-export interface TurnoClinica {
-  id: string
-  fechaHora: string
-  estado: EstadoTurno
-  paciente: string
-  dni: string
-  empresa: string
-  sede: string
+export interface PacienteApto {
+  id: string;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  puesto: string;
 }
 
-export interface EmpresaClinica {
-  id: string
-  razonSocial: string
-  cuit: string
-  trabajadores: number
-  vencidos: number
-  porVencer: number
+export interface EmpresaApto {
+  id: string;
+  razonSocial: string;
+  cuit: string;
+}
+
+export interface AptoPorVencer {
+  id: string;
+  paciente: PacienteApto;
+  empresa: EmpresaApto;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  diasRestantes: number;
+  estadoAptitud: EstadoAptitud;
 }
