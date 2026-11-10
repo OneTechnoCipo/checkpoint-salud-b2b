@@ -1,33 +1,88 @@
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
+import { apiFetch } from '../services/api'
 
 const authStore = useAuthStore()
 const router = useRouter()
 
-// Datos simulados para el panel del paciente.
-const turnosMock = [
-  {
-    usuarioId: '4',
-    fecha: '15 de noviembre de 2026',
-    dia: '15',
-    mes: 'NOV',
-    anio: '2026',
-    hora: '09:30',
-    sede: 'Neuquén',
-    estado: 'Confirmado',
-    tipo: 'Control de salud ocupacional',
-  },
-]
+// Estructura de los turnos que devuelve el backend.
+interface Turno {
+  id: string
+  fechaHora: string
+  estado: string
+  sede: {
+    nombre: string
+    direccion: string
+  }
+}
 
-// Busca únicamente el turno del usuario autenticado.
-const turnoProximo = computed(() =>
-  turnosMock.find(
-    (turno) => turno.usuarioId === authStore.usuario?.id,
-  ),
-)
+interface RespuestaTurnos {
+  mensaje: string
+  turnos: Turno[]
+}
+
+// Guardamos los turnos obtenidos del backend.
+const turnos = ref<Turno[]>([])
+
+// Consultamos los próximos turnos del paciente.
+async function obtenerTurnos() {
+  try {
+    const respuesta = await apiFetch<RespuestaTurnos>(
+      '/api/paciente/turnos'
+    )
+
+    turnos.value = respuesta.turnos
+  } catch (error) {
+    console.error('Error al obtener los turnos:', error)
+  }
+}
+
+// Convertimos la fecha del backend al formato que usa tu diseño.
+const turnoProximo = computed(() => {
+  const turno = turnos.value[0]
+
+  if (!turno) return null
+
+  const fecha = new Date(turno.fechaHora)
+
+  const formatoFecha = new Intl.DateTimeFormat('es-AR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+
+  const formatoPartes = new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).formatToParts(fecha)
+
+  const dia = formatoPartes.find(parte => parte.type === 'day')?.value ?? ''
+  const mes = formatoPartes.find(parte => parte.type === 'month')?.value
+    ?.replace('.', '')
+    .toUpperCase() ?? ''
+
+  const hora = new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(fecha)
+
+  return {
+    fecha: formatoFecha.format(fecha),
+    dia,
+    mes,
+    hora,
+    sede: turno.sede.nombre,
+    estado: turno.estado,
+    tipo: 'Control de salud ocupacional',
+  }
+})
 
 const nombrePaciente = computed(() => {
   const email = authStore.usuario?.email ?? ''
@@ -40,6 +95,11 @@ function cerrarSesion() {
   authStore.cerrarSesion()
   router.push('/login')
 }
+
+// Al entrar a la pantalla, consultamos los turnos.
+onMounted(() => {
+  obtenerTurnos()
+})
 </script>
 
 <template>

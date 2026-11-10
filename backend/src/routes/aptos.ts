@@ -275,3 +275,70 @@ aptosRouter.get(
     }
   },
 );
+
+
+// Consultar el último apto médico del paciente autenticado.
+aptosRouter.get(
+  "/paciente/actual",
+  autenticar,
+  permitirRoles("PACIENTE"),
+  async (req, res) => {
+    try {
+      const usuarioId = req.usuario?.id;
+
+      if (!usuarioId) {
+        res.status(401).json({
+          mensaje: "Necesitás iniciar sesión.",
+        });
+        return;
+      }
+
+      // Obtener el paciente asociado al usuario autenticado.
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { pacienteId: true },
+      });
+
+      if (!usuario?.pacienteId) {
+        res.status(404).json({
+          mensaje: "El usuario no tiene un paciente asociado.",
+        });
+        return;
+      }
+
+      // Buscar el apto más reciente del paciente.
+      const apto = await prisma.aptoMedico.findFirst({
+        where: {
+          pacienteId: usuario.pacienteId,
+        },
+        orderBy: {
+          fechaEmision: "desc",
+        },
+        select: {
+          id: true,
+          estadoAptitud: true,
+          fechaEmision: true,
+          fechaVencimiento: true,
+        },
+      });
+
+      if (!apto) {
+        res.status(404).json({
+          mensaje: "Todavía no tenés un apto médico registrado.",
+        });
+        return;
+      }
+
+      res.json({
+        mensaje: "Apto obtenido correctamente.",
+        apto,
+      });
+    } catch (error) {
+      console.error("Error al obtener el apto del paciente:", error);
+
+      res.status(500).json({
+        mensaje: "No se pudo obtener el apto médico.",
+      });
+    }
+  },
+);
