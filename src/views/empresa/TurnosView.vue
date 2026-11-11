@@ -3,7 +3,14 @@
 import { computed, onMounted, ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
 import { apiFetch } from '../../services/api'
-import type { EstadoAptitud } from '../../types/empresa'
+import type { EstadoTurnoEmpresa } from '../../types/empresa.ts'
+import type { Sede } from '../../types/empresa.ts'
+import type { TurnoEmpresa } from '../../types/empresa.ts'
+import type { TrabajadorEmpresa } from '../../types/empresa.ts'
+import type { RespuestaSedes } from '../../types/empresa.ts'
+import type { RespuestaTurnos } from '../../types/empresa.ts'
+import type { RespuestaTrabajadores } from '../../types/empresa.ts'
+import type { PorSolicitar } from '../../types/empresa.ts'
 import {
   diasRestantes,
   enDias,
@@ -11,87 +18,45 @@ import {
   formatearHora,
 } from '../../utils/fechas'
 
-interface TrabajadorEmpresa {
-  id: string
-  dni: string
-  nombre: string
-  apellido: string
-  puesto: {
-    id: string
-    nombrePuesto: string
-    mesesVigencia: number
-  } | null
-  estadoAptitud: EstadoAptitud
-  fechaVencimiento: string | null
-}
 
-interface Sede {
-  id: string
-  nombre: string
-  direccion: string
-}
-
-type EstadoTurnoEmpresa = 'PENDIENTE' | 'ASISTIO' | 'CANCELADO'
-
-interface TurnoEmpresa {
-  id: string
-  trabajadorId: string
-  trabajador: string
-  fechaHora: string
-  horaAConfirmar: boolean
-  sedeId: string
-  sede: string
-  direccionSede?: string | null
-  estado: EstadoTurnoEmpresa
-  estadoSolicitud?: string
-}
-
-interface RespuestaTrabajadores {
-  mensaje: string
-  trabajadores: TrabajadorEmpresa[]
-}
-
-interface RespuestaSedes {
-  mensaje: string
-  sedes: Sede[]
-}
-
-interface RespuestaTurnos {
-  mensaje: string
-  turnos: TurnoEmpresa[]
-}
-
+// Fecha mínima para solicitar turno: mañana.
 const manana = enDias(1).slice(0, 10)
 
-const trabajadores = ref<TrabajadorEmpresa[]>([])
+//definición de variables reactivas
+const trabajadores = ref<TrabajadorEmpresa[]>([]) 
 const sedes = ref<Sede[]>([])
 const turnos = ref<TurnoEmpresa[]>([])
 
+// Estados de carga y envío
 const cargando = ref(true)
 const enviando = ref(false)
-const errorCarga = ref('')
+const errorCarga = ref('') //el error se carga vacio, despues cambia
 
-const filtroEstado = ref<EstadoTurnoEmpresa | 'TODOS'>('TODOS')
+// Filtros y formulario
+const filtroEstado = ref<EstadoTurnoEmpresa | 'TODOS'>('TODOS') // Estado por defecto es TODOS
 
-const formularioAbierto = ref(false)
+  // Variables del formulario de solicitud, todas inicializadas como vacías
+const formularioAbierto = ref(false) //formulario cerrado por defecto
 const trabajadorId = ref('')
 const fechaPreferida = ref('')
 const sedeId = ref('')
 const error = ref('')
 const aviso = ref('')
 
+// Definición de filtros, etiquetas y estilos para los estados de los turnos
 const filtros: { valor: EstadoTurnoEmpresa | 'TODOS'; etiqueta: string }[] = [
   { valor: 'TODOS', etiqueta: 'Todos' },
   { valor: 'PENDIENTE', etiqueta: 'Pendientes' },
   { valor: 'ASISTIO', etiqueta: 'Asistió' },
   { valor: 'CANCELADO', etiqueta: 'Cancelados / rechazados' },
 ]
-
+//asigno un valor string a cada estado de turno para mostrarlo en la tabla
 const etiquetas: Record<EstadoTurnoEmpresa, string> = {
   PENDIENTE: 'Pendiente',
   ASISTIO: 'Asistió',
   CANCELADO: 'Cancelado',
 }
+//estilos para cada estado
 
 const estilos: Record<EstadoTurnoEmpresa, string> = {
   PENDIENTE: 'bg-amber-100 text-amber-800',
@@ -99,30 +64,30 @@ const estilos: Record<EstadoTurnoEmpresa, string> = {
   CANCELADO: 'bg-red-100 text-red-800',
 }
 
-const conTurnoPendiente = computed(
+
+//creo una lista de ids de cada trabajador con turno pendiente, evita repiticiones y busca rapido
+const conTurnoPendiente = computed( 
   () =>
     new Set(
-      turnos.value
-        .filter((turno) => turno.estado === 'PENDIENTE')
-        .map((turno) => turno.trabajadorId),
+      turnos.value //a cada turno
+        .filter((turno) => turno.estado === 'PENDIENTE') //filtro los que estan pendientes
+        .map((turno) => turno.trabajadorId), //elijo el id del trabajador de cada turno pendiente
     ),
 )
 
-interface PorSolicitar {
-  trabajador: TrabajadorEmpresa
-  texto: string
-  urgente: boolean
-  orden: number
-}
+
 
 // Trabajadores con apto pendiente o próximo a vencer.
 const necesitanTurno = computed(() => {
   const lista: PorSolicitar[] = []
 
-  for (const trabajador of trabajadores.value) {
-    if (conTurnoPendiente.value.has(trabajador.id)) continue
+  //recorro todos los trabajadores y le asigno el nombre trabajador a cada uno
+  for (const trabajador of trabajadores.value) { 
+    if (conTurnoPendiente.value.has(trabajador.id))  //si el turno pendiente tiene el mismo id que el trabajador 
+      continue //salta al siguiente trabajador
 
-    if (trabajador.estadoAptitud === 'PENDIENTE') {
+    if (trabajador.estadoAptitud === 'PENDIENTE') { //si el estado de aptitud del trabajador es PENDIENTE
+      //agrego a la lista un objeto con el trabajador, el texto, si es urgente y el orden
       lista.push({
         trabajador,
         texto: 'Pendiente de examen',
@@ -131,24 +96,25 @@ const necesitanTurno = computed(() => {
       })
       continue
     }
-
+    //si el estado de aptitud del trabajador es APTO o APTO_CON_OBSERVACIONES y tiene fecha de vencimiento
     if (
       (trabajador.estadoAptitud === 'APTO' ||
         trabajador.estadoAptitud === 'APTO_CON_OBSERVACIONES') &&
       trabajador.fechaVencimiento
     ) {
-      const dias = diasRestantes(trabajador.fechaVencimiento)
+      const dias = diasRestantes(trabajador.fechaVencimiento) //calculo los dias restantes para el vencimiento del apto
 
-      if (dias <= 30) {
+      if (dias <= 30) { //si los dias restantes son menores o iguales a 30
         const texto =
           dias < 0
-            ? `Apto vencido hace ${-dias} días`
+            ? `Apto vencido hace ${-dias} días` //si los dias son negativos, significa que el apto ya venció
             : dias === 0
-              ? 'Vence hoy'
-              : dias === 1
-                ? 'Vence mañana'
-                : `Vence en ${dias} días`
+              ? 'Vence hoy' //si los dias son 0, significa que el apto vence hoy
+              : dias === 1 
+                ? 'Vence mañana' //si los dias son 1, significa que el apto vence mañana
+                : `Vence en ${dias} días` //si los dias son mayores a 1, significa que el apto vence en x dias
 
+                //envio la lista con el trabajador, el texto, si es urgente y el orden
         lista.push({
           trabajador,
           texto,
@@ -159,20 +125,22 @@ const necesitanTurno = computed(() => {
     }
   }
 
+  //ordeno la lista por el orden de los dias restantes
   return lista.sort((a, b) => a.orden - b.orden)
 })
 
-// Trabajadores disponibles para solicitar turno.
-const solicitables = computed(() =>
-  trabajadores.value
+//filtro los trabajadores que no tienen turno pendiente y que no tienen estado NO_APTO
+const solicitables = computed(() => 
+  trabajadores.value 
     .filter(
       (trabajador) =>
         trabajador.estadoAptitud !== 'NO_APTO' &&
         !conTurnoPendiente.value.has(trabajador.id),
     )
+    //ordeno la lista por apellido
     .sort((a, b) => a.apellido.localeCompare(b.apellido)),
 )
-
+//filtro los turnos ya asinados y los ordeno por fecha y hora proximas
 const turnosFiltrados = computed(() =>
   turnos.value
     .filter(
@@ -183,76 +151,81 @@ const turnosFiltrados = computed(() =>
     .sort((a, b) => a.fechaHora.localeCompare(b.fechaHora)),
 )
 
+//funcion que carga los datos de trabajadores, turnos y sedes desde la API
 async function cargarDatos() {
-  cargando.value = true
-  errorCarga.value = ''
+  cargando.value = true //cargando los datos
+  errorCarga.value = '' //error vacio
 
-  try {
+  try { //hago 3 peticiones directo a la api 
     const [respuestaTrabajadores, respuestaTurnos, respuestaSedes] =
       await Promise.all([
-        apiFetch<RespuestaTrabajadores>('/api/empresa/trabajadores'),
-        apiFetch<RespuestaTurnos>('/api/empresa/turnos'),
-        apiFetch<RespuestaSedes>('/api/empresa/sedes'),
+        apiFetch<RespuestaTrabajadores>('/api/empresa/trabajadores'), //traigo los trabajadores
+        apiFetch<RespuestaTurnos>('/api/empresa/turnos'), //traigo los turnos
+        apiFetch<RespuestaSedes>('/api/empresa/sedes'), //traigo las sedes
       ])
 
-    trabajadores.value = respuestaTrabajadores.trabajadores
-    turnos.value = respuestaTurnos.turnos
-    sedes.value = respuestaSedes.sedes
+    trabajadores.value = respuestaTrabajadores.trabajadores //asigno los trabajadores a la variable reactiva
+    turnos.value = respuestaTurnos.turnos //asigno los turnos a la variable reactiva
+    sedes.value = respuestaSedes.sedes //asigno las sedes a la variable reactiva
 
-    if (!sedeId.value && sedes.value.length > 0) {
-      sedeId.value = sedes.value[0].id
+    if (!sedeId.value && sedes.value.length > 0) { //si no hay sede seleccionada y hay sedes disponibles
+      sedeId.value = sedes.value[0].id //asigno la primera sede disponible a la variable reactiva
     }
-  } catch (err) {
+  } catch (err) { //si hay un error al cargar los datos
     errorCarga.value =
       err instanceof Error
-        ? err.message
+        ? err.message //si el error es una instancia de Error, muestro el mensaje del error
         : 'No se pudieron cargar los datos de turnos.'
   } finally {
     cargando.value = false
   }
 }
 
-function abrirFormulario(id = '') {
-  trabajadorId.value = id
-  fechaPreferida.value = ''
-  sedeId.value = sedes.value[0]?.id ?? ''
-  error.value = ''
-  aviso.value = ''
-  formularioAbierto.value = true
+//abro el formulario de solicitud de turno
+function abrirFormulario(id = '') { 
+  //para abrir el formulario tengo que asignar el id del trabajador, la fecha preferida y la sede seleccionada
+  trabajadorId.value = id 
+  fechaPreferida.value = '' 
+  sedeId.value = sedes.value[0]?.id ?? '' 
+  error.value = '' 
+  aviso.value = '' 
+  formularioAbierto.value = true //abro el formulario de solicitud de turno
 }
-
+//si me arrepiento y quiero cancelar la solicitud de turno, cierro y limpio el formulario
 function cancelar() {
   formularioAbierto.value = false
   error.value = ''
 }
-
+//funcion de solicitud de turno para cada paciente
 async function solicitar() {
-  error.value = ''
-  aviso.value = ''
+  error.value = '' //error vacio
+  aviso.value = '' //aviso vacio
 
+  //busco el trabajador seleccionado 
   const trabajador = trabajadores.value.find(
     (t) => t.id === trabajadorId.value,
   )
-
+//si ese trabajador no existe, muestro un error y retorno
   if (!trabajador) {
     error.value = 'Elegí un trabajador.'
     return
   }
-
+//si la fecha preferida no es válida o es menor a mañana, muestro un error y retorno
   if (!fechaPreferida.value || fechaPreferida.value < manana) {
     error.value = 'Elegí una fecha a partir de mañana.'
     return
   }
-
+//si la sede no es válida, muestro un error y retorno
   if (!sedeId.value) {
     error.value = 'Elegí una sede.'
     return
   }
-
+//si el trabajador tiene estado NO_APTO, muestro un error y retorno
   if (trabajador.estadoAptitud === 'NO_APTO') {
     error.value = 'Este trabajador tiene estado NO APTO y no puede solicitar turno.'
     return
   }
+  //si el trabajador tiene un turno pendiente, muestro un error y retorno
 
   if (conTurnoPendiente.value.has(trabajador.id)) {
     error.value = 'Este trabajador ya tiene una solicitud o turno pendiente.'
@@ -260,17 +233,17 @@ async function solicitar() {
   }
 
   enviando.value = true
-
+//hago la peticion a la api para solicitar el turno
   try {
     await apiFetch('/api/turnos/solicitudes', {
-      method: 'POST',
-      body: JSON.stringify({
-        pacienteId: trabajador.id,
+      method: 'POST', //metodo POST para enviar datos
+      body: JSON.stringify({ //envio el id del paciente, la fecha preferida y la sede seleccionada
+        pacienteId: trabajador.id, 
         fechaPreferida: fechaPreferida.value,
         sedeId: sedeId.value,
       }),
     })
-
+//si la solicitud fue exitosa, muestro un aviso y limpio el formulario
     const nombre = `${trabajador.apellido}, ${trabajador.nombre}`
 
     aviso.value = `Solicitud enviada para ${nombre} el ${formatearFecha(fechaPreferida.value)}. La clínica confirmará el horario.`
@@ -280,7 +253,7 @@ async function solicitar() {
     fechaPreferida.value = ''
 
     await cargarDatos()
-  } catch (err) {
+  } catch (err) { //si hay un error al enviar la solicitud, muestro un error
     error.value =
       err instanceof Error
         ? err.message
@@ -290,7 +263,7 @@ async function solicitar() {
   }
 }
 
-onMounted(() => {
+onMounted(() => { //cuando el componente se monta, cargo los datos
   cargarDatos()
 })
 </script>

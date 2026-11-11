@@ -6,28 +6,11 @@ import { apiFetch } from '../../services/api'
 import type { EstadoAptitud } from '../../types/empresa'
 import { diasRestantes, formatearFecha } from '../../utils/fechas'
 
-interface Trabajador {
-  id: string
-  dni: string
-  nombre: string
-  apellido: string
-  puesto: {
-    id: string
-    nombrePuesto: string
-    mesesVigencia: number
-  } | null
-  estadoAptitud: EstadoAptitud
-  fechaVencimiento: string | null
-}
-
-interface RespuestaTrabajadores {
-  mensaje: string
-  trabajadores: Trabajador[]
-}
+import type {TrabajadorEmpresa,RespuestaTrabajadores,} from '../../types/empresa'
 
 const filtroEstado = ref<EstadoAptitud | 'TODOS'>('TODOS')
 const busqueda = ref('')
-const trabajadoresOriginales = ref<Trabajador[]>([])
+const trabajadoresOriginales = ref<TrabajadorEmpresa[]>([])
 const cargando = ref(true)
 const error = ref('')
 

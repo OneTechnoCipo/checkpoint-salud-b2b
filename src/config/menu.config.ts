@@ -23,9 +23,6 @@ export const menuPorRol: Record<Rol, MenuItem[]> = {
   ],
   ADMIN: [
     { label: 'Inicio', route: '/admin', icon: 'home' },
-    { label: 'Usuarios', route: '/usuarios', icon: 'users' },
-    { label: 'Empresas', route: '/empresas', icon: 'building' },
-    { label: 'Puestos y requisitos', route: '/puestos', icon: 'clipboard' },
   ],
   PACIENTE: [],
 }

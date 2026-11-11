@@ -4,36 +4,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '../services/api'
+import type { Turno, RespuestaTurnos, Apto, RespuestaApto } from '../types/paciente'
 
 const authStore = useAuthStore()
 const router = useRouter()
 
-interface Turno {
-  id: string
-  fechaHora: string
-  estado: string
-  sede: {
-    nombre: string
-    direccion: string
-  }
-}
-
-interface RespuestaTurnos {
-  mensaje: string
-  turnos: Turno[]
-}
-
-interface Apto {
-  id: string
-  estadoAptitud: 'APTO' | 'APTO_CON_OBSERVACIONES' | 'NO_APTO'
-  fechaEmision: string
-  fechaVencimiento: string | null
-}
-
-interface RespuestaApto {
-  mensaje: string
-  apto: Apto
-}
 
 const turnos = ref<Turno[]>([])
 const apto = ref<Apto | null>(null)

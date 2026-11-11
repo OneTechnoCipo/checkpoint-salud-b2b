@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
 import { apiFetch } from '../../services/api.ts'
-
+import type { ArchivoHistorial, RespuestaCarga } from '../../types/cargaMasiva.ts'
 const archivoSeleccionado = ref<File | null>(null)
 const contenidoPrevio = ref<string>('')
 const mostrarVistaPrevia = ref(false) // <-- Aquí está declarada correctamente
@@ -11,19 +11,6 @@ const resultadoMensaje = ref('')
 const errorMensaje = ref('')
 const detallesErrores = ref<string[]>([])
 
-interface ArchivoHistorial {
-  nombre: string
-  fecha: string
-  registros: number
-  estado: 'Éxito' | 'Con advertencias'
-  contenidoRaw: string
-}
-
-interface RespuestaCarga {
-  mensaje: string
-  totalErrores: number
-  detallesErrores?: string[]
-}
 
 const archivosHistorial = ref<ArchivoHistorial[]>([])
 

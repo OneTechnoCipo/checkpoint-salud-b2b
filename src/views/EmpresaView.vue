@@ -3,33 +3,10 @@
 import { computed, onMounted, ref } from 'vue'
 import PanelPagina from '../components/PanelPagina.vue'
 import { apiFetch } from '../services/api'
-
-interface Trabajador {
-  id: string
-  dni: string
-  nombre: string
-  apellido: string
-  puesto: {
-    id: string
-    nombrePuesto: string
-    mesesVigencia: number
-  } | null
-}
-
-interface Empresa {
-  id: string
-  razonSocial: string
-  cuit: string
-}
-
-interface RespuestaEmpresa {
-  mensaje: string
-  empresa: Empresa
-  trabajadores: Trabajador[]
-}
+import type { Empresa, TrabajadorEmpresa, RespuestaEmpresa } from '../types/empresa'
 
 const empresa = ref<Empresa | null>(null)
-const trabajadores = ref<Trabajador[]>([])
+const trabajadores = ref<TrabajadorEmpresa[]>([])
 const cargando = ref(true)
 const error = ref('')
 

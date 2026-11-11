@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
 import { apiFetch } from '../../services/api.ts'
 
+//Seccion de empresas cargadas desde el servidor, se usa en la vista de empresas
 // Estados reactivos
 const empresas = ref<any[]>([])
 const cargando = ref(true)
@@ -13,9 +14,9 @@ async function cargarEmpresas() {
   try {
     cargando.value = true
     error.value = ''
-    empresas.value = await apiFetch<any[]>('/api/empresas')
+    empresas.value = await apiFetch<any[]>('/api/empresas') //me traigo las empresas desde el servidor usando la función apiFetch
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'No se pudieron cargar las empresas.'
+    error.value = e instanceof Error ? e.message : 'No se pudieron cargar las empresas.' //si hay un error, lo guardo en el estado de error
   } finally {
     cargando.value = false
   }
