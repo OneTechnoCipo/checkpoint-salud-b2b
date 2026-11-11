@@ -1,87 +1,184 @@
+
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useAuthStore } from '../stores/auth'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+import { apiFetch } from '../services/api'
+
+type RolUsuario = 'PACIENTE' | 'CLINICA' | 'EMPRESA' | 'ADMIN'
+
+interface Puesto {
+  id: string
+  nombrePuesto: string
+}
+
+interface Empresa {
+  id: string
+  razonSocial: string
+  cuit: string
+  puestos: Puesto[]
+}
 
 const authStore = useAuthStore()
 const router = useRouter()
+
+const empresas = ref<Empresa[]>([])
+const tipoCuenta = ref<RolUsuario>('PACIENTE')
+
+const empresaId = ref('')
+const puestoId = ref('')
+const dni = ref('')
+const nombre = ref('')
+const apellido = ref('')
+const email = ref('')
+const password = ref('')
+
+const cargando = ref(false)
+const cargandoEmpresas = ref(false)
+const mensaje = ref('')
+const error = ref('')
+
+const puestosDisponibles = computed(() => {
+  return empresas.value.find((empresa) => empresa.id === empresaId.value)?.puestos ?? []
+})
+
+const esPaciente = computed(() => tipoCuenta.value === 'PACIENTE')
+const esEmpresa = computed(() => tipoCuenta.value === 'EMPRESA')
 
 function cerrarSesion() {
   authStore.cerrarSesion()
   router.push('/login')
 }
 
-// Estructura del usuario en la vista de administración
-interface UsuarioItem {
-  id: number
-  email: string
-  password: string
-  rol: 'CLINICA' | 'EMPRESA' | 'ADMIN' | 'PACIENTE'
-  activo: boolean
-}
+async function cargarEmpresas() {
+  cargandoEmpresas.value = true
+  error.value = ''
 
-const nuevoEmail = ref('')
-const nuevoRol = ref<'CLINICA' | 'EMPRESA' | 'ADMIN' | 'PACIENTE'>('CLINICA')
-
-// Lista inicial de usuarios simulados en el panel
-const usuarios = ref<UsuarioItem[]>([
-  { id: 1, email: 'adminMock@gmail.com', password: 'admin123', rol: 'ADMIN', activo: true },
-  { id: 2, email: 'clinicaMock@gmail.com', password: 'clinica123', rol: 'CLINICA', activo: true },
-  { id: 3, email: 'empresaMock@gmail.com', password: 'empresa123', rol: 'EMPRESA', activo: true },
-  { id: 4, email: 'pacienteMock@gmail.com', password: 'paciente123', rol: 'PACIENTE', activo: true },
-])
-
-onMounted(() => {
-  const guardados = localStorage.getItem('checkpoint_usuarios')
-  if (guardados) {
-    usuarios.value = JSON.parse(guardados)
+  try {
+    empresas.value = await apiFetch<Empresa[]>('/api/empresas')
+  } catch (err) {
+    error.value = err instanceof Error
+      ? err.message
+      : 'No se pudieron cargar las empresas.'
+  } finally {
+    cargandoEmpresas.value = false
   }
-})
-
-// Función auxiliar para guardar en localStorage cada vez que modifiquemos algo
-function sincronizarStorage() {
-  localStorage.setItem('checkpoint_usuarios', JSON.stringify(usuarios.value))
 }
 
-// Función para dar de alta un nuevo usuario con contraseña única y diferente cada vez
-function crearUsuario() {
-  if (!nuevoEmail.value.trim()) {
-    alert('Por favor, ingresa un correo electrónico válido.')
+function limpiarFormulario() {
+  dni.value = ''
+  nombre.value = ''
+  apellido.value = ''
+  email.value = ''
+  password.value = ''
+  empresaId.value = ''
+  puestoId.value = ''
+}
+
+function cambiarTipoCuenta() {
+  mensaje.value = ''
+  error.value = ''
+  limpiarFormulario()
+}
+
+function cambiarEmpresa() {
+  puestoId.value = ''
+}
+
+async function crearTrabajador() {
+  mensaje.value = ''
+  error.value = ''
+
+  if (!nombre.value.trim() || !apellido.value.trim()) {
+    error.value = 'Completá el nombre y el apellido.'
     return
   }
 
-  const numeroAleatorio = Math.floor(1000 + Math.random() * 9000)
-  const passwordGenerada = `${nuevoRol.value.toLowerCase()}_${numeroAleatorio}`
+  cargando.value = true
 
-  usuarios.value.push({
-    id: Date.now(),
-    email: nuevoEmail.value.trim(),
-    password: passwordGenerada,
-    rol: nuevoRol.value,
-    activo: true,
-  })
+  try {
+    if (esPaciente.value) {
+      if (!dni.value.trim()) {
+        throw new Error('Completá el DNI del trabajador.')
+      }
 
-  sincronizarStorage() // <-- Guardamos los cambios
+      if (!empresaId.value || !puestoId.value) {
+        throw new Error('Seleccioná una empresa y un puesto.')
+      }
 
-  alert(`¡Usuario creado con éxito!\nCorreo: ${nuevoEmail.value.trim()}\nContraseña asignada: ${passwordGenerada}`)
-  nuevoEmail.value = ''
-}
+      const empresa = empresas.value.find((item) => item.id === empresaId.value)
+      const puesto = puestosDisponibles.value.find((item) => item.id === puestoId.value)
 
-// Funcion para alternar el estado (Activo / Inactivo - Baja lógica)
-function toggleEstado(id: number) {
-  const usuario = usuarios.value.find((u) => u.id === id)
-  if (usuario) {
-    usuario.activo = !usuario.activo
-    sincronizarStorage() // <-- Guardamos los cambios
+      if (!empresa || !puesto) {
+        throw new Error('La empresa o el puesto seleccionado no son válidos.')
+      }
+
+      const respuesta = await apiFetch<{
+        mensaje: string
+        totalErrores: number
+        detallesErrores: string[]
+      }>('/api/trabajadores/carga-masiva', {
+        method: 'POST',
+        body: JSON.stringify({
+          trabajadores: [
+            {
+              dni: dni.value.trim(),
+              nombre: nombre.value.trim(),
+              apellido: apellido.value.trim(),
+              cuitEmpresa: empresa.cuit,
+              nombrePuesto: puesto.nombrePuesto,
+            },
+          ],
+        }),
+      })
+
+      if (respuesta.totalErrores > 0) {
+        throw new Error(respuesta.detallesErrores.join(' '))
+      }
+
+      mensaje.value =
+        `Trabajador ${nombre.value.trim()} ${apellido.value.trim()} registrado correctamente. Usuario y contraseña: ${dni.value.trim()}.`
+    } else {
+      if (!email.value.trim() || !password.value) {
+        throw new Error('Completá el correo y la contraseña.')
+      }
+
+      if (password.value.length < 8) {
+        throw new Error('La contraseña debe tener al menos 8 caracteres.')
+      }
+
+      if (esEmpresa.value && !empresaId.value) {
+        throw new Error('Seleccioná la empresa asociada a esta cuenta.')
+      }
+
+      const respuesta = await apiFetch<{
+        mensaje: string
+      }>('/api/usuarios', {
+        method: 'POST',
+        body: JSON.stringify({
+          nombre: nombre.value.trim(),
+          apellido: apellido.value.trim(),
+          email: email.value.trim(),
+          password: password.value,
+          rol: tipoCuenta.value,
+          empresaId: esEmpresa.value ? empresaId.value : null,
+        }),
+      })
+
+      mensaje.value = respuesta.mensaje
+    }
+
+    limpiarFormulario()
+  } catch (err) {
+    error.value = err instanceof Error
+      ? err.message
+      : 'No se pudo crear la cuenta.'
+  } finally {
+    cargando.value = false
   }
 }
 
-function eliminarUsuario(emailAEliminar: string) {
-  // Filtramos la lista sacando al usuario que coincide
-  usuarios.value = usuarios.value.filter(u => u.email !== emailAEliminar)
-  // Actualizamos el localStorage para que persista el cambio
-  sincronizarStorage()
-}
+onMounted(cargarEmpresas)
 </script>
 
 <template>
@@ -99,112 +196,206 @@ function eliminarUsuario(emailAEliminar: string) {
 
     <section class="contenido">
       <h2>Bienvenido al panel de Administración</h2>
+
       <p class="subtitulo-seccion">
-        Desde este espacio se podrán administrar los usuarios
-        y consultar la configuración general del sistema.
+        Desde este espacio podés registrar trabajadores y administrar los accesos al sistema.
       </p>
 
-      <!-- Sección de Gestión de Usuarios (Alta y Baja lógica) -->
-      <div class="seccion-gestion-usuarios">
-        <h3>Gestión de Usuarios</h3>
-        
-        <div class="formulario-alta">
+      <section class="seccion-gestion-usuarios">
+        <h3>Crear usuario</h3>
+
+        <form class="formulario-alta" @submit.prevent="crearTrabajador">
           <div class="inputs-group">
-            <input 
-              v-model="nuevoEmail" 
-              type="email" 
-              placeholder="Correo electrónico corporativo" 
-              class="input-texto"
-            />
-            
-            <select v-model="nuevoRol" class="select-rol">
-              <option value="CLINICA">CLINICA</option>
-              <option value="EMPRESA">EMPRESA</option>
-              <option value="ADMIN">ADMIN</option>
-              <option value="PACIENTE">PACIENTE</option>
-            </select>
+            <label>
+              Tipo de cuenta
+              <select
+                v-model="tipoCuenta"
+                class="select-rol"
+                @change="cambiarTipoCuenta"
+                required
+              >
+                <option value="PACIENTE">Paciente / Trabajador</option>
+                <option value="CLINICA">Clínica</option>
+                <option value="EMPRESA">Empresa</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
+            </label>
 
-            <button @click="crearUsuario" class="btn-agregar">
-              Crear Usuario
-            </button>
+            <label>
+              Nombre
+              <input
+                v-model="nombre"
+                type="text"
+                placeholder="Nombre"
+                class="input-texto"
+                required
+              />
+            </label>
+
+            <label>
+              Apellido
+              <input
+                v-model="apellido"
+                type="text"
+                placeholder="Apellido"
+                class="input-texto"
+                required
+              />
+            </label>
+
+            <template v-if="esPaciente">
+              <label>
+                DNI
+                <input
+                  v-model="dni"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="Número de DNI"
+                  class="input-texto"
+                  required
+                />
+              </label>
+
+              <label>
+                Empresa
+                <select
+                  v-model="empresaId"
+                  class="select-rol"
+                  required
+                  @change="cambiarEmpresa"
+                >
+                  <option value="" disabled>Seleccionar empresa</option>
+                  <option
+                    v-for="empresa in empresas"
+                    :key="empresa.id"
+                    :value="empresa.id"
+                  >
+                    {{ empresa.razonSocial }}
+                  </option>
+                </select>
+              </label>
+
+              <label>
+                Puesto
+                <select
+                  v-model="puestoId"
+                  class="select-rol"
+                  required
+                  :disabled="!empresaId"
+                >
+                  <option value="" disabled>Seleccionar puesto</option>
+                  <option
+                    v-for="puesto in puestosDisponibles"
+                    :key="puesto.id"
+                    :value="puesto.id"
+                  >
+                    {{ puesto.nombrePuesto }}
+                  </option>
+                </select>
+              </label>
+            </template>
+
+            <template v-else>
+              <label>
+                Correo electrónico
+                <input
+                  v-model="email"
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  class="input-texto"
+                  autocomplete="email"
+                  required
+                />
+              </label>
+
+              <label>
+                Contraseña inicial
+                <input
+                  v-model="password"
+                  type="password"
+                  placeholder="Mínimo 8 caracteres"
+                  class="input-texto"
+                  autocomplete="new-password"
+                  minlength="8"
+                  required
+                />
+              </label>
+
+              <label v-if="esEmpresa">
+                Empresa asociada
+                <select
+                  v-model="empresaId"
+                  class="select-rol"
+                  required
+                >
+                  <option value="" disabled>Seleccionar empresa</option>
+                  <option
+                    v-for="empresa in empresas"
+                    :key="empresa.id"
+                    :value="empresa.id"
+                  >
+                    {{ empresa.razonSocial }}
+                  </option>
+                </select>
+              </label>
+            </template>
           </div>
-        </div>
 
-        <h4>Usuarios Registrados</h4>
-        <div class="tabla-contenedor">
-          <table class="tabla-usuarios">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th class="text-center">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="user in usuarios" :key="user.id">
-                <td>{{ user.email }}</td>
-                <td>
-                  <span class="badge-rol">{{ user.rol }}</span>
-                </td>
-                <td>
-                  <span :class="user.activo ? 'estado-activo' : 'estado-inactivo'">
-                    {{ user.activo ? 'Activo' : 'Inactivo' }}
-                  </span>
-                </td>
-                <td class="text-center">
-                  <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-                    <button 
-                      @click="toggleEstado(user.id)" 
-                      :class="user.activo ? 'btn-desactivar' : 'btn-activar'"
-                    >
-                      {{ user.activo ? 'Desactivar' : 'Activar' }}
-                    </button>
+          <p v-if="mensaje" class="mensaje-exito">{{ mensaje }}</p>
+          <p v-if="error" class="mensaje-error">{{ error }}</p>
 
-                    <button 
-                      @click="eliminarUsuario(user.email)" 
-                      class="btn-borrar"
-                      title="Eliminar usuario definitivamente"
-                      aria-label="Eliminar usuario"
-                    >
-                      <svg 
-                        viewBox="0 0 24 24" 
-                        width="16" 
-                        height="16" 
-                        stroke="currentColor" 
-                        stroke-width="2" 
-                        fill="none" 
-                        stroke-linecap="round" 
-                        stroke-linejoin="round"
-                      >
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                      </svg>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <button
+            type="submit"
+            class="btn-agregar"
+            :disabled="cargando || cargandoEmpresas"
+          >
+            {{ cargando ? 'Guardando...' : 'Crear cuenta' }}
+          </button>
+
+          <p v-if="cargandoEmpresas" class="ayuda">
+            Cargando empresas...
+          </p>
+
+          <p v-else-if="empresas.length === 0" class="ayuda">
+            No hay empresas registradas o no se pudieron cargar.
+          </p>
+        </form>
+
+        <div class="informacion-acceso">
+          <h4>Credenciales de acceso</h4>
+
+          <template v-if="esPaciente">
+            <p>El trabajador ingresará utilizando:</p>
+            <ul>
+              <li><strong>Usuario:</strong> su número de DNI.</li>
+              <li><strong>Contraseña inicial:</strong> su número de DNI.</li>
+            </ul>
+          </template>
+
+          <template v-else>
+            <p>El personal ingresará utilizando:</p>
+            <ul>
+              <li><strong>Usuario:</strong> el correo electrónico registrado.</li>
+              <li><strong>Contraseña:</strong> la contraseña inicial asignada.</li>
+            </ul>
+          </template>
         </div>
-      </div>
+      </section>
 
       <div class="tarjetas">
         <article class="tarjeta">
-          <h3>Usuarios</h3>
-          <p>Administración de los accesos al sistema.</p>
+          <h3>Trabajadores</h3>
+          <p>Registro de empleados y asociación con sus empresas y puestos.</p>
         </article>
 
         <article class="tarjeta">
           <h3>Empresas</h3>
-          <p>Gestión de las empresas registradas.</p>
+          <p>Consulta de las empresas registradas en el sistema.</p>
         </article>
 
         <article class="tarjeta">
-          <h3>Configuración</h3>
-          <p>Consulta de las opciones generales del sistema.</p>
+          <h3>Accesos</h3>
+          <p>Creación de cuentas según el rol de cada usuario.</p>
         </article>
       </div>
     </section>
@@ -248,7 +439,6 @@ function eliminarUsuario(emailAEliminar: string) {
   color: white;
   cursor: pointer;
   font-weight: 600;
-  transition: background 0.2s;
 }
 
 .btn-salir:hover {
@@ -279,22 +469,13 @@ function eliminarUsuario(emailAEliminar: string) {
   box-shadow: 0 4px 12px rgb(15 23 42 / 4%);
 }
 
-.seccion-gestion-usuarios h3 {
-  color: #173b70;
-  margin-top: 0;
-  margin-bottom: 20px;
-  font-size: 20px;
-}
-
+.seccion-gestion-usuarios h3,
 .seccion-gestion-usuarios h4 {
   color: #173b70;
-  margin-top: 28px;
-  margin-bottom: 14px;
-  font-size: 16px;
+  margin-top: 0;
 }
 
 .formulario-alta {
-  margin-bottom: 10px;
   background: #f8fafc;
   padding: 18px;
   border-radius: 10px;
@@ -302,13 +483,25 @@ function eliminarUsuario(emailAEliminar: string) {
 }
 
 .inputs-group {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.input-texto, .select-rol {
+.inputs-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.input-texto,
+.select-rol {
+  width: 100%;
+  box-sizing: border-box;
   padding: 11px 14px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -316,22 +509,17 @@ function eliminarUsuario(emailAEliminar: string) {
   outline: none;
   background: white;
   color: #1e293b;
-  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.input-texto {
-  flex: 1;
-  min-width: 260px;
-}
-
-.input-texto:focus, .select-rol:focus {
+.input-texto:focus,
+.select-rol:focus {
   border-color: #173b70;
-  box-shadow: 0 0 0 3px rgba(23, 59, 112, 0.1);
+  box-shadow: 0 0 0 3px rgb(23 59 112 / 10%);
 }
 
-.select-rol {
-  min-width: 150px;
-  cursor: pointer;
+.select-rol:disabled {
+  background: #e2e8f0;
+  cursor: not-allowed;
 }
 
 .btn-agregar {
@@ -342,113 +530,60 @@ function eliminarUsuario(emailAEliminar: string) {
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
 }
 
 .btn-agregar:hover {
   background: #059669;
 }
 
-.tabla-contenedor {
-  overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+.btn-agregar:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.tabla-usuarios {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
+.mensaje-exito,
+.mensaje-error,
+.ayuda {
+  padding: 12px;
+  border-radius: 8px;
   font-size: 14px;
 }
 
-.tabla-usuarios th, 
-.tabla-usuarios td {
-  padding: 14px 18px;
-  border-bottom: 1px solid #e2e8f0;
+.mensaje-exito {
+  color: #047857;
+  background: #d1fae5;
 }
 
-.tabla-usuarios tr:last-child td {
-  border-bottom: none;
+.mensaje-error {
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
-.tabla-usuarios th {
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 600;
+.ayuda {
+  color: #64748b;
+  background: #f1f5f9;
 }
 
-.badge-rol {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 5px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+.informacion-acceso {
+  margin-top: 24px;
+  padding: 18px;
+  background: #eff6ff;
+  border-radius: 10px;
+  color: #334155;
 }
 
-.estado-activo {
-  color: #059669;
-  font-weight: 600;
+.informacion-acceso h4 {
+  margin-bottom: 8px;
 }
 
-.estado-inactivo {
-  color: #dc2626;
-  font-weight: 600;
+.informacion-acceso p {
+  margin-bottom: 8px;
 }
 
-.text-center {
-  text-align: center;
-}
-
-.btn-desactivar {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-desactivar:hover {
-  background: #dc2626;
-}
-
-.btn-activar {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-activar:hover {
-  background: #059669;
-}
-
-/* Botón de borrado definitivo con ícono de tacho */
-.btn-borrar {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-}
-
-.btn-borrar:hover {
-  background: #dc2626;
+.informacion-acceso ul {
+  padding-left: 22px;
+  margin: 0;
+  line-height: 1.8;
 }
 
 .tarjetas {
@@ -477,5 +612,19 @@ function eliminarUsuario(emailAEliminar: string) {
   color: #64748b;
   line-height: 1.5;
   font-size: 14px;
+}
+
+@media (max-width: 650px) {
+  .pagina {
+    padding: 18px;
+  }
+
+  .inputs-group {
+    grid-template-columns: 1fr;
+  }
+
+  .encabezado {
+    align-items: flex-start;
+  }
 }
 </style>

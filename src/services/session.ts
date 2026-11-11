@@ -1,3 +1,4 @@
+
 import type { Rol } from '../types/auth'
 
 interface RespuestaLogin {
@@ -11,7 +12,7 @@ interface RespuestaLogin {
 }
 
 export async function iniciarSesionApi(
-  email: string,
+  identificador: string,
   password: string,
 ): Promise<RespuestaLogin> {
   const respuesta = await fetch('http://localhost:3000/api/auth/login', {
@@ -19,7 +20,10 @@ export async function iniciarSesionApi(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      identificador,
+      password,
+    }),
   })
 
   const datos = await respuesta.json()
