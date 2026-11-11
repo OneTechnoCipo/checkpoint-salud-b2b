@@ -1,42 +1,96 @@
+
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
-import { trabajadoresMock } from '../../services/empresaMock'
+import { apiFetch } from '../../services/api'
 import type { EstadoAptitud } from '../../types/empresa'
 import { diasRestantes, formatearFecha } from '../../utils/fechas'
 
+interface Trabajador {
+  id: string
+  dni: string
+  nombre: string
+  apellido: string
+  puesto: {
+    id: string
+    nombrePuesto: string
+    mesesVigencia: number
+  } | null
+  estadoAptitud: EstadoAptitud
+  fechaVencimiento: string | null
+}
+
+interface RespuestaTrabajadores {
+  mensaje: string
+  trabajadores: Trabajador[]
+}
+
 const filtroEstado = ref<EstadoAptitud | 'TODOS'>('TODOS')
 const busqueda = ref('')
+const trabajadoresOriginales = ref<Trabajador[]>([])
+const cargando = ref(true)
+const error = ref('')
 
 const filtros: { valor: EstadoAptitud | 'TODOS'; etiqueta: string }[] = [
   { valor: 'TODOS', etiqueta: 'Todos' },
   { valor: 'APTO', etiqueta: 'Aptos' },
   { valor: 'NO_APTO', etiqueta: 'No aptos' },
   { valor: 'PENDIENTE', etiqueta: 'Pendientes de examen' },
+  { valor: 'APTO_CON_OBSERVACIONES', etiqueta: 'Aptos con observaciones' },
 ]
 
 const etiquetas: Record<EstadoAptitud, string> = {
   APTO: 'Apto',
   NO_APTO: 'No apto',
   PENDIENTE: 'Pendiente de examen',
+  APTO_CON_OBSERVACIONES: 'Apto con observaciones',
 }
 
 const estilos: Record<EstadoAptitud, string> = {
   APTO: 'bg-emerald-100 text-emerald-800',
   NO_APTO: 'bg-red-100 text-red-800',
   PENDIENTE: 'bg-amber-100 text-amber-800',
+  APTO_CON_OBSERVACIONES: 'bg-blue-100 text-blue-800',
 }
+
+async function cargarTrabajadores() {
+  cargando.value = true
+  error.value = ''
+
+  try {
+    const respuesta = await apiFetch<RespuestaTrabajadores>(
+      '/api/empresa/trabajadores',
+    )
+
+    trabajadoresOriginales.value = respuesta.trabajadores
+  } catch (err) {
+    error.value =
+      err instanceof Error
+        ? err.message
+        : 'No se pudieron cargar los trabajadores.'
+  } finally {
+    cargando.value = false
+  }
+}
+
+onMounted(cargarTrabajadores)
 
 const trabajadores = computed(() => {
   const texto = busqueda.value.trim().toLowerCase()
 
-  return trabajadoresMock
-    .filter((t) => filtroEstado.value === 'TODOS' || t.estadoAptitud === filtroEstado.value)
+  return trabajadoresOriginales.value
     .filter(
-      (t) =>
+      (trabajador) =>
+        filtroEstado.value === 'TODOS' ||
+        trabajador.estadoAptitud === filtroEstado.value,
+    )
+    .filter(
+      (trabajador) =>
         !texto ||
-        `${t.apellido} ${t.nombre}`.toLowerCase().includes(texto) ||
-        t.dni.includes(texto),
+        `${trabajador.apellido} ${trabajador.nombre}`
+          .toLowerCase()
+          .includes(texto) ||
+        trabajador.dni.includes(texto),
     )
     .sort((a, b) => a.apellido.localeCompare(b.apellido))
 })
@@ -45,7 +99,7 @@ const trabajadores = computed(() => {
 <template>
   <PanelPagina
     titulo="Trabajadores"
-    descripcion="Estado de aptitud del personal que enviaste a examinar (datos de ejemplo)."
+    descripcion="Estado de aptitud del personal que enviaste a examinar."
   >
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-3">
@@ -69,10 +123,37 @@ const trabajadores = computed(() => {
         </label>
       </div>
 
-      <div class="text-sm text-slate-500">{{ trabajadores.length }} trabajadores</div>
+      <div class="text-sm text-slate-500">
+        {{ trabajadores.length }} trabajadores
+      </div>
     </div>
 
-    <div class="overflow-x-auto rounded-xl border border-[#e0e6ef] bg-white shadow-sm">
+    <div
+      v-if="cargando"
+      class="rounded-xl border border-[#e0e6ef] bg-white px-4 py-8 text-center text-sm text-slate-500"
+    >
+      Cargando trabajadores...
+    </div>
+
+    <div
+      v-else-if="error"
+      class="rounded-xl border border-red-200 bg-red-50 px-4 py-5"
+    >
+      <p class="text-sm text-red-700">{{ error }}</p>
+
+      <button
+        type="button"
+        class="mt-3 rounded-lg bg-[#173b70] px-4 py-2 text-sm font-medium text-white"
+        @click="cargarTrabajadores"
+      >
+        Reintentar
+      </button>
+    </div>
+
+    <div
+      v-else
+      class="overflow-x-auto rounded-xl border border-[#e0e6ef] bg-white shadow-sm"
+    >
       <table class="w-full border-collapse text-left text-sm">
         <thead class="bg-[#f4f6fa] text-xs uppercase tracking-wide text-slate-500">
           <tr>
@@ -85,10 +166,21 @@ const trabajadores = computed(() => {
         </thead>
 
         <tbody>
-          <tr v-for="t in trabajadores" :key="t.id" class="border-t border-[#e0e6ef]">
-            <td class="px-4 py-3 font-medium">{{ t.apellido }}, {{ t.nombre }}</td>
+          <tr
+            v-for="t in trabajadores"
+            :key="t.id"
+            class="border-t border-[#e0e6ef]"
+          >
+            <td class="px-4 py-3 font-medium">
+              {{ t.apellido }}, {{ t.nombre }}
+            </td>
+
             <td class="px-4 py-3">{{ t.dni }}</td>
-            <td class="px-4 py-3">{{ t.puesto }}</td>
+
+            <td class="px-4 py-3">
+              {{ t.puesto?.nombrePuesto ?? 'Sin puesto asignado' }}
+            </td>
+
             <td class="px-4 py-3">
               <span
                 class="inline-block rounded-full px-2.5 py-1 text-xs font-semibold"
@@ -97,9 +189,11 @@ const trabajadores = computed(() => {
                 {{ etiquetas[t.estadoAptitud] }}
               </span>
             </td>
+
             <td class="px-4 py-3">
               <template v-if="t.fechaVencimiento">
                 {{ formatearFecha(t.fechaVencimiento) }}
+
                 <span
                   class="ml-1 text-xs"
                   :class="
@@ -111,6 +205,7 @@ const trabajadores = computed(() => {
                   ({{ diasRestantes(t.fechaVencimiento) }} días)
                 </span>
               </template>
+
               <span v-else class="text-slate-400">—</span>
             </td>
           </tr>
@@ -125,8 +220,8 @@ const trabajadores = computed(() => {
     </div>
 
     <div class="mt-3 text-xs text-slate-500">
-      La clínica no comparte con la empresa el detalle médico: solo si cada
-      trabajador está apto o no apto.
+      La clínica no comparte con la empresa el detalle médico: solo el estado
+      de aptitud y la fecha de vencimiento correspondiente.
     </div>
   </PanelPagina>
 </template>

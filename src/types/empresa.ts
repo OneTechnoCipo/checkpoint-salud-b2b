@@ -1,4 +1,5 @@
-export type EstadoAptitud = 'APTO' | 'NO_APTO' | 'PENDIENTE'
+export type EstadoAptitud = | 'APTO'  | 'NO_APTO' | 'PENDIENTE'  | 'APTO_CON_OBSERVACIONES'
+
 export type EstadoTurnoEmpresa = 'PENDIENTE' | 'ASISTIO' | 'CANCELADO'
 
 // Lo único que la empresa puede ver de cada trabajador.

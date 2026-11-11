@@ -1,3 +1,4 @@
+
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import multer from "multer";
@@ -6,21 +7,29 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { autenticar, permitirRoles } from "../middlewares/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { EstadoAptitud } from "../generated/prisma/enums.js";
 
 const UPLOADS = path.resolve(process.cwd(), "uploads");
 fs.mkdirSync(UPLOADS, { recursive: true });
 
-const RESULTADOS = ["APTO", "APTO_CON_OBSERVACIONES", "NO_APTO"] as const;
+const RESULTADOS = [
+  EstadoAptitud.APTO,
+  EstadoAptitud.APTO_CON_OBSERVACIONES,
+  EstadoAptitud.NO_APTO,
+] as const;
+
 type Resultado = (typeof RESULTADOS)[number];
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 const subida = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOADS),
-    // El nombre lo genera el servidor: nunca se usa el que manda el usuario.
-    filename: (_req, _file, cb) => cb(null, `aptitud-${randomUUID()}.pdf`),
+    filename: (_req, _file, cb) =>
+      cb(null, `aptitud-${randomUUID()}.pdf`),
   }),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
@@ -32,7 +41,11 @@ const subida = multer({
   },
 });
 
-function recibirDocumento(req: Request, res: Response, next: NextFunction) {
+function recibirDocumento(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   subida.single("documento")(req, res, (error: unknown) => {
     if (!error) {
       next();
@@ -51,11 +64,15 @@ function recibirDocumento(req: Request, res: Response, next: NextFunction) {
     }
 
     if (error instanceof Error && error.message === "SOLO_PDF") {
-      res.status(400).json({ mensaje: "El documento tiene que ser un PDF." });
+      res.status(400).json({
+        mensaje: "El documento tiene que ser un PDF.",
+      });
       return;
     }
 
-    res.status(500).json({ mensaje: "No se pudo recibir el documento." });
+    res.status(500).json({
+      mensaje: "No se pudo recibir el documento.",
+    });
   });
 }
 
@@ -73,29 +90,124 @@ function esPdf(ruta: string): boolean {
 }
 
 function descartar(archivo?: Express.Multer.File) {
-  if (archivo) fs.rm(archivo.path, { force: true }, () => {});
+  if (archivo) {
+    fs.rm(archivo.path, { force: true }, () => {});
+  }
 }
 
-// Fecha de hoy sin hora (las columnas de fecha son DATE).
+// Fecha de hoy sin hora.
 function hoy(): Date {
   const ahora = new Date();
-  return new Date(Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()));
+
+  return new Date(
+    Date.UTC(
+      ahora.getFullYear(),
+      ahora.getMonth(),
+      ahora.getDate(),
+    ),
+  );
 }
 
-// Suma meses sin desbordar a fin de mes (31/01 + 1 mes = 28/02).
+// Suma meses sin desbordar a fin de mes.
 function sumarMeses(base: Date, meses: number): Date {
-  const resultado = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + meses, 1));
+  const resultado = new Date(
+    Date.UTC(
+      base.getUTCFullYear(),
+      base.getUTCMonth() + meses,
+      1,
+    ),
+  );
+
   const ultimoDia = new Date(
-    Date.UTC(resultado.getUTCFullYear(), resultado.getUTCMonth() + 1, 0),
+    Date.UTC(
+      resultado.getUTCFullYear(),
+      resultado.getUTCMonth() + 1,
+      0,
+    ),
   ).getUTCDate();
 
-  resultado.setUTCDate(Math.min(base.getUTCDate(), ultimoDia));
+  resultado.setUTCDate(
+    Math.min(base.getUTCDate(), ultimoDia),
+  );
+
   return resultado;
 }
 
 export const aptosRouter = express.Router();
 
-// Registrar el resultado de un examen. Solo la clínica.
+// =====================================================
+// CONSULTAR TODOS LOS APTOS PARA CONTROL DE VENCIMIENTOS
+// Solo la clínica.
+// =====================================================
+
+aptosRouter.get(
+  "/",
+  autenticar,
+  permitirRoles("CLINICA"),
+  async (_req, res) => {
+    try {
+      const aptos = await prisma.aptoMedico.findMany({
+        where: {
+          estadoAptitud: {
+            in: [
+              EstadoAptitud.APTO,
+              EstadoAptitud.APTO_CON_OBSERVACIONES,
+            ],
+          },
+          fechaVencimiento: {
+            not: null,
+          },
+        },
+        orderBy: {
+          fechaVencimiento: "asc",
+        },
+        select: {
+          id: true,
+          estadoAptitud: true,
+          fechaEmision: true,
+          fechaVencimiento: true,
+          paciente: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              empresa: {
+                select: {
+                  razonSocial: true,
+                },
+              },
+              puesto: {
+                select: {
+                  nombrePuesto: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      res.json({
+        mensaje: "Aptos médicos obtenidos correctamente.",
+        aptos,
+      });
+    } catch (error) {
+      console.error(
+        "Error al obtener los aptos médicos:",
+        error,
+      );
+
+      res.status(500).json({
+        mensaje: "No se pudo obtener el listado de aptos médicos.",
+      });
+    }
+  },
+);
+
+// =====================================================
+// REGISTRAR EL RESULTADO DE UN EXAMEN
+// Solo la clínica.
+// =====================================================
+
 aptosRouter.post(
   "/",
   autenticar,
@@ -110,15 +222,28 @@ aptosRouter.post(
     };
 
     try {
-      const { pacienteId, estadoAptitud, detalleClinico, fechaExamen, vigenciaMeses, turnoId } =
-        req.body ?? {};
+      const {
+        pacienteId,
+        estadoAptitud,
+        detalleClinico,
+        fechaExamen,
+        vigenciaMeses,
+        turnoId,
+      } = req.body ?? {};
 
-      if (typeof pacienteId !== "string" || !UUID.test(pacienteId)) {
+      if (
+        typeof pacienteId !== "string" ||
+        !UUID.test(pacienteId)
+      ) {
         rechazar(400, "Elegí un paciente.");
         return;
       }
 
-      if (!(RESULTADOS as readonly string[]).includes(estadoAptitud)) {
+      if (
+        !(RESULTADOS as readonly string[]).includes(
+          estadoAptitud,
+        )
+      ) {
         rechazar(400, "Elegí el resultado del examen.");
         return;
       }
@@ -140,15 +265,25 @@ aptosRouter.post(
         return;
       }
 
-      if (turnoId !== undefined && turnoId !== "" && (typeof turnoId !== "string" || !UUID.test(turnoId))) {
+      if (
+        turnoId !== undefined &&
+        turnoId !== "" &&
+        (typeof turnoId !== "string" || !UUID.test(turnoId))
+      ) {
         rechazar(400, "El turno no es válido.");
         return;
       }
 
-      const observaciones = typeof detalleClinico === "string" ? detalleClinico.trim() : "";
+      const observaciones =
+        typeof detalleClinico === "string"
+          ? detalleClinico.trim()
+          : "";
 
       if (observaciones.length > 2000) {
-        rechazar(400, "Las observaciones superan los 2000 caracteres.");
+        rechazar(
+          400,
+          "Las observaciones superan los 2000 caracteres.",
+        );
         return;
       }
 
@@ -159,7 +294,13 @@ aptosRouter.post(
 
       const paciente = await prisma.paciente.findUnique({
         where: { id: pacienteId },
-        select: { puesto: { select: { mesesVigencia: true } } },
+        select: {
+          puesto: {
+            select: {
+              mesesVigencia: true,
+            },
+          },
+        },
       });
 
       if (!paciente) {
@@ -167,46 +308,72 @@ aptosRouter.post(
         return;
       }
 
-      // La vigencia puede indicarse al registrar; si no, es la del puesto.
       const vigencia =
         vigenciaMeses === undefined || vigenciaMeses === ""
           ? paciente.puesto.mesesVigencia
           : Number(vigenciaMeses);
 
-      if (!Number.isInteger(vigencia) || vigencia < 1 || vigencia > 60) {
-        rechazar(400, "La vigencia tiene que ser de 1 a 60 meses.");
+      if (
+        !Number.isInteger(vigencia) ||
+        vigencia < 1 ||
+        vigencia > 60
+      ) {
+        rechazar(
+          400,
+          "La vigencia tiene que ser de 1 a 60 meses.",
+        );
         return;
       }
 
-      const turnoElegido: string | null = typeof turnoId === "string" && turnoId !== "" ? turnoId : null;
+      const turnoElegido: string | null =
+        typeof turnoId === "string" && turnoId !== ""
+          ? turnoId
+          : null;
 
       if (turnoElegido) {
         const turno = await prisma.turno.findFirst({
-          where: { id: turnoElegido, pacienteId },
-          select: { apto: { select: { id: true } } },
+          where: {
+            id: turnoElegido,
+            pacienteId,
+          },
+          select: {
+            apto: {
+              select: {
+                id: true,
+              },
+            },
+          },
         });
 
         if (!turno) {
-          rechazar(404, "El turno no corresponde a ese paciente.");
+          rechazar(
+            404,
+            "El turno no corresponde a ese paciente.",
+          );
           return;
         }
 
         if (turno.apto) {
-          rechazar(409, "Ese turno ya tiene un apto registrado.");
+          rechazar(
+            409,
+            "Ese turno ya tiene un apto registrado.",
+          );
           return;
         }
       }
 
       const resultado = estadoAptitud as Resultado;
 
-      // El apto y el estado del turno cambian juntos: o se guardan los dos o ninguno.
       const apto = await prisma.$transaction(async (tx) => {
         const creado = await tx.aptoMedico.create({
           data: {
             pacienteId,
             estadoAptitud: resultado,
             fechaEmision: examen,
-            fechaVencimiento: resultado === "NO_APTO" ? null : sumarMeses(examen, vigencia),
+            fechaVencimiento:
+              resultado === EstadoAptitud.NO_APTO
+                ? null
+                : sumarMeses(examen, vigencia),
             detalleClinico: observaciones || null,
             documentoUrl: archivo?.filename ?? null,
             turnoId: turnoElegido,
@@ -230,7 +397,10 @@ aptosRouter.post(
         return creado;
       });
 
-      res.status(201).json({ mensaje: "Apto registrado.", apto });
+      res.status(201).json({
+        mensaje: "Apto registrado.",
+        apto,
+      });
     } catch (error) {
       console.error("Error al registrar el apto:", error);
       rechazar(500, "No se pudo registrar el apto.");
@@ -238,7 +408,11 @@ aptosRouter.post(
   },
 );
 
-// Descargar el documento de un apto. Solo la clínica
+// =====================================================
+// DESCARGAR EL DOCUMENTO DE UN APTO
+// Solo la clínica.
+// =====================================================
+
 aptosRouter.get(
   "/:id/documento",
   autenticar,
@@ -248,30 +422,119 @@ aptosRouter.get(
       const id = req.params.id;
 
       if (typeof id !== "string" || !UUID.test(id)) {
-        res.status(400).json({ mensaje: "El identificador no es válido." });
+        res.status(400).json({
+          mensaje: "El identificador no es válido.",
+        });
         return;
       }
 
       const apto = await prisma.aptoMedico.findUnique({
         where: { id },
-        select: { documentoUrl: true },
+        select: {
+          documentoUrl: true,
+        },
       });
 
       if (!apto?.documentoUrl) {
-        res.status(404).json({ mensaje: "Este apto no tiene documento." });
+        res.status(404).json({
+          mensaje: "Este apto no tiene documento.",
+        });
         return;
       }
 
-      const ruta = path.resolve(UPLOADS, path.basename(apto.documentoUrl));
+      const ruta = path.resolve(
+        UPLOADS,
+        path.basename(apto.documentoUrl),
+      );
 
-      if (!ruta.startsWith(UPLOADS + path.sep) || !fs.existsSync(ruta)) {
-        res.status(404).json({ mensaje: "El documento no está disponible." });
+      if (
+        !ruta.startsWith(UPLOADS + path.sep) ||
+        !fs.existsSync(ruta)
+      ) {
+        res.status(404).json({
+          mensaje: "El documento no está disponible.",
+        });
         return;
       }
 
       res.download(ruta, "certificado-de-aptitud.pdf");
     } catch {
-      res.status(500).json({ mensaje: "No se pudo obtener el documento." });
+      res.status(500).json({
+        mensaje: "No se pudo obtener el documento.",
+      });
+    }
+  },
+);
+
+// =====================================================
+// CONSULTAR EL ÚLTIMO APTO DEL PACIENTE AUTENTICADO
+// Solo el paciente.
+// =====================================================
+
+aptosRouter.get(
+  "/paciente/actual",
+  autenticar,
+  permitirRoles("PACIENTE"),
+  async (req, res) => {
+    try {
+      const usuarioId = req.usuario?.id;
+
+      if (!usuarioId) {
+        res.status(401).json({
+          mensaje: "Necesitás iniciar sesión.",
+        });
+        return;
+      }
+
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: {
+          pacienteId: true,
+        },
+      });
+
+      if (!usuario?.pacienteId) {
+        res.status(404).json({
+          mensaje: "El usuario no tiene un paciente asociado.",
+        });
+        return;
+      }
+
+      const apto = await prisma.aptoMedico.findFirst({
+        where: {
+          pacienteId: usuario.pacienteId,
+        },
+        orderBy: {
+          fechaEmision: "desc",
+        },
+        select: {
+          id: true,
+          estadoAptitud: true,
+          fechaEmision: true,
+          fechaVencimiento: true,
+        },
+      });
+
+      if (!apto) {
+        res.status(404).json({
+          mensaje: "Todavía no tenés un apto médico registrado.",
+        });
+        return;
+      }
+
+      res.json({
+        mensaje: "Apto obtenido correctamente.",
+        apto,
+      });
+    } catch (error) {
+      console.error(
+        "Error al obtener el apto del paciente:",
+        error,
+      );
+
+      res.status(500).json({
+        mensaje: "No se pudo obtener el apto médico.",
+      });
     }
   },
 );

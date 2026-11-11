@@ -1,9 +1,9 @@
+
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 import { iniciarSesionApi } from '../services/session'
-import type { Rol } from '../types/auth'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -17,41 +17,22 @@ const cargando = ref(false)
 async function iniciarSesion() {
   error.value = ''
 
-  const correo = email.value.trim()
+  const identificador = email.value.trim()
 
-  if (!correo || !password.value) {
-    error.value = 'Completá el correo electrónico y la contraseña.'
-    return
-  }
-
-  // Validar el formato del correo electrónico
-  const formatoCorreo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-  if (!formatoCorreo.test(correo)) {
-    error.value = 'Ingresá un correo electrónico válido.'
+  if (!identificador || !password.value) {
+    error.value = 'Completá el correo electrónico o DNI y la contraseña.'
     return
   }
 
   cargando.value = true
 
   try {
-    let datos: {
-      token: string
-      usuario: {
-        id: string
-        email: string
-        rol: Rol
-      }
-      mensaje?: string
-    }
-
-    // Ejecución del login simulado (Mock / LocalStorage)
-    datos = await iniciarSesionApi(correo, password.value)
+    const datos = await iniciarSesionApi(identificador, password.value)
 
     if (
       !datos.token ||
       !datos.usuario ||
-      !['CLINICA', 'EMPRESA', 'ADMIN','PACIENTE'].includes(datos.usuario.rol)
+      !['CLINICA', 'EMPRESA', 'ADMIN', 'PACIENTE'].includes(datos.usuario.rol)
     ) {
       error.value = 'La respuesta del servidor no es válida.'
       return
@@ -93,7 +74,6 @@ async function iniciarSesion() {
 
 <template>
   <div class="login-container">
-    <!-- Panel izquierdo: identidad de la plataforma -->
     <aside class="login-sidebar">
       <div class="sidebar-content">
         <div class="brand-icon" aria-hidden="true">
@@ -130,7 +110,6 @@ async function iniciarSesion() {
       </footer>
     </aside>
 
-    <!-- Panel derecho: formulario -->
     <main class="login-main">
       <div class="form-wrapper">
         <div class="form-heading">
@@ -147,7 +126,7 @@ async function iniciarSesion() {
 
         <form @submit.prevent="iniciarSesion" class="login-form">
           <div class="input-group">
-            <label for="email">Correo electrónico</label>
+            <label for="email">Correo electrónico o DNI</label>
 
             <div class="input-wrapper">
               <svg
@@ -165,9 +144,9 @@ async function iniciarSesion() {
               <input
                 id="email"
                 v-model="email"
-                type="email"
+                type="text"
                 autocomplete="username"
-                placeholder="Ingresá tu correo electrónico"
+                placeholder="Ingresá tu correo electrónico o DNI"
                 required
               />
             </div>
@@ -267,7 +246,6 @@ async function iniciarSesion() {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-/* Panel de marca */
 .login-sidebar {
   position: relative;
   display: flex;
@@ -448,7 +426,6 @@ async function iniciarSesion() {
   line-height: 1.5;
 }
 
-/* Panel del formulario */
 .login-main {
   display: flex;
   min-width: 0;
@@ -701,7 +678,6 @@ async function iniciarSesion() {
   color: #00bcd4;
 }
 
-/* Adaptación a tabletas y celulares */
 @media (max-width: 900px) {
   .login-container {
     grid-template-columns: minmax(0, 1fr);
