@@ -4,43 +4,43 @@ import PanelPagina from '../components/PanelPagina.vue'
 import { formatearFecha, formatearHora } from '../utils/fechas'
 import { apiFetch } from '../services/api'
 
-// Estados reactivos reales
+//estados reactivos para almacenar empresas, turnos y estado de carga
 const empresas = ref<any[]>([])
 const turnos = ref<any[]>([])
 const cargando = ref(true)
 
-// Estado para el formulario de registro de aptos con soporte para archivo PDF
+//estados reactivos para el modal de registro de apto médico
 const turnoActual = ref<any | null>(null)
-const estadoAptitud = ref('APTO_CON_OBSERVACIONES')
+const estadoAptitud = ref('APTO') // Valor por defecto 
 const detalleClinico = ref('')
-const archivoDocumento = ref<File | null>(null)
-const guardando = ref(false)
+const archivoDocumento = ref<File | null>(null) //espacio para almacenar el archivo PDF seleccionado, empieza como null
+const guardando = ref(false) 
 
-// Cargar datos al montar la vista usando apiFetch centralizado
+//funcion que carga los datos de turnos y empresas desde la API usando apiFetch
 async function cargarDatos() {
   try {
-    cargando.value = true
+    cargando.value = true //indico que se está cargando
 
-    // apiFetch inyecta automáticamente el token y maneja sesiones vencidas
-    const [resTurnos, resEmpresas] = await Promise.all([
-      apiFetch<any[]>('/api/turnos'),
-      apiFetch<any[]>('/api/empresas')
+    //ejecuta dos consultas de forma simultánea (en paralelo) y espera a que ambas terminen para guardar sus resultados
+    const [resTurnos, resEmpresas] = await Promise.all([ 
+      apiFetch<any[]>('/api/turnos'), //obtiene los turnos desde la API
+      apiFetch<any[]>('/api/empresas') //obtiene las empresas desde la API
     ])
 
-    turnos.value = resTurnos || []
-    empresas.value = resEmpresas || []
+    turnos.value = resTurnos || [] //si no hay turnos, asigna un array vacío
+    empresas.value = resEmpresas || [] //si no hay empresas, asigna un array vacío
   } catch (error) {
-    console.error('Error al conectar con el backend:', error)
+    console.error('Error al conectar con el backend:', error) //muestra un error en la consola si falla la conexión
   } finally {
-    cargando.value = false
+    cargando.value = false //indica que terminó la carga, ya sea con éxito o con error
   }
 }
 
-onMounted(() => {
+onMounted(() => { //cuando el componente se monta, carga los datos iniciales
   cargarDatos()
 })
 
-function manejarArchivo(event: Event) {
+function manejarArchivo(event: Event) { //función que maneja la selección de archivo PDF
   const target = event.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
     archivoDocumento.value = target.files[0]
@@ -82,16 +82,16 @@ async function registrarAptoMedico() {
     guardando.value = false
   }
 }
-
+// Computed properties para filtrar turnos pendientes y próximos
 const turnosPendientes = computed(() =>
-  turnos.value.filter((turno) => turno.estado === 'PENDIENTE'),
+  turnos.value.filter((turno) => turno.estado === 'PENDIENTE'), //filtra los turnos que están pendientes de atención
 )
 
-const proximosTurnos = computed(() =>
+const proximosTurnos = computed(() => //filtra los turnos que están pendientes de llenar y toma solo 4
   turnosPendientes.value.slice(0, 4),
 )
 
-const tarjetas = computed(() => [
+const tarjetas = computed(() => [ //crea un array de objetos que representan las tarjetas de resumen
   {
     titulo: 'Empresas',
     valor: empresas.value.length,
@@ -206,6 +206,7 @@ const tarjetas = computed(() => [
             <div>
               <label class="block text-xs font-semibold text-slate-600 mb-1">Estado de Aptitud</label>
               <select v-model="estadoAptitud" class="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                <option value="">Seleccionar estado</option>
                 <option value="APTO">Apto</option>
                 <option value="APTO_CON_OBSERVACIONES">Apto con Observaciones</option>
                 <option value="NO_APTO">No Apto</option>

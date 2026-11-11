@@ -4,29 +4,8 @@ import { computed, onMounted, ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
 import { apiFetch } from '../../services/api'
 import { diasRestantes, formatearFecha } from '../../utils/fechas'
+import type { AptoMedico, RespuestaAptos } from '../../types/aptos'
 
-interface AptoMedico {
-  id: string
-  estadoAptitud: 'APTO' | 'APTO_CON_OBSERVACIONES'
-  fechaEmision: string | null
-  fechaVencimiento: string
-  paciente: {
-    id: string
-    nombre: string
-    apellido: string
-    empresa: {
-      razonSocial: string
-    }
-    puesto: {
-      nombrePuesto: string
-    }
-  }
-}
-
-interface RespuestaAptos {
-  mensaje: string
-  aptos: AptoMedico[]
-}
 
 // Datos reales
 const aptos = ref<AptoMedico[]>([])

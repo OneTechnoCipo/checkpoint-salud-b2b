@@ -4,68 +4,35 @@ import { computed, onMounted, ref } from 'vue'
 import PanelPagina from '../../components/PanelPagina.vue'
 import { apiFetch } from '../../services/api'
 import { formatearFecha, formatearHora } from '../../utils/fechas'
+import type {  SolicitudApi, SolicitudesResponse, TurnoApi } from '../../types/turnos.ts'
 
-interface PacienteApi {
-  nombre: string
-  apellido: string
-  dni: string
-  empresa?: { razonSocial: string }
-  puesto?: { nombrePuesto: string }
-}
-
-interface SedeApi {
-  nombre: string
-  direccion?: string
-}
-
-interface SolicitudApi {
-  id: string
-  fechaPreferida: string
-  estado: string
-  paciente: PacienteApi
-  sede: SedeApi
-}
-
-interface SolicitudesResponse {
-  mensaje: string
-  solicitudes: SolicitudApi[]
-}
-
-interface TurnoApi {
-  id: string
-  fechaHora: string
-  estado: string
-  paciente?: {
-    nombre: string
-    apellido: string
-    dni: string
-    empresa?: { razonSocial: string }
-  }
-  sede?: { nombre: string }
-}
-
+// Estados reactivos para solicitudes y turnos, esperan un valor inicial vacío y se llenarán con datos de la API
 const solicitudes = ref<SolicitudApi[]>([])
 const turnos = ref<TurnoApi[]>([])
 
+// Estados reactivos para manejar la carga de datos, errores y mensajes de éxito
 const cargando = ref(true)
 const error = ref('')
 const mensaje = ref('')
 const filtroEstado = ref<string>('TODOS')
 const busqueda = ref('')
 
+//fecha y hora asignada para cada solicitud, se almacena en un objeto donde la clave es el ID de la solicitud
 const fechasAsignadas = ref<Record<string, string>>({})
 const procesandoId = ref('')
 
-async function cargarDatos() {
+async function cargarDatos() { //función que carga solicitudes y turnos desde la API y maneja errores
   try {
     cargando.value = true
     error.value = ''
     
+    //dos consultas en simultaneo 
     const [respuestaSolicitudes, respuestaTurnos] = await Promise.all([
-      apiFetch<SolicitudesResponse>('/api/turnos/solicitudes'),
-      apiFetch<TurnoApi[]>('/api/turnos'),
+      apiFetch<SolicitudesResponse>('/api/turnos/solicitudes'),  //obtiene las solicitudes desde la API
+      apiFetch<TurnoApi[]>('/api/turnos'), //obtiene los turnos desde la API
     ])
 
+//recibo datos y los asigno a los estados reactivos
     solicitudes.value = respuestaSolicitudes.solicitudes
     turnos.value = respuestaTurnos
 
@@ -83,7 +50,7 @@ async function cargarDatos() {
           .slice(0, 16)
       }
     })
-  } catch (e) {
+  } catch (e) { 
     error.value = e instanceof Error
       ? e.message
       : 'No se pudieron cargar los datos.'
@@ -92,18 +59,19 @@ async function cargarDatos() {
   }
 }
 
+// Función para confirmar una solicitud de turno, valida la fecha y hora asignada y realiza la petición a la API
 async function confirmarSolicitud(solicitud: SolicitudApi) {
   const fechaHoraLocal = fechasAsignadas.value[solicitud.id]
 
   if (!fechaHoraLocal) {
-    error.value = 'Seleccioná la fecha y hora del turno.'
+    error.value = 'Seleccioná la fecha y hora del turno.' //mesaje de error si no se selecciona fecha y hora
     return
   }
 
-  const fechaHora = new Date(fechaHoraLocal)
+  const fechaHora = new Date(fechaHoraLocal) //
 
-  if (Number.isNaN(fechaHora.getTime()) || fechaHora <= new Date()) {
-    error.value = 'El turno debe asignarse para una fecha y hora futuras.'
+  if (Number.isNaN(fechaHora.getTime()) || fechaHora <= new Date()) { //valida que la fecha y hora sea válida y futura
+    error.value = 'El turno debe asignarse para una fecha y hora futuras.' //mensaje de error si la fecha y hora no es válida o es pasada
     return
   }
 
@@ -112,50 +80,53 @@ async function confirmarSolicitud(solicitud: SolicitudApi) {
     error.value = ''
     mensaje.value = ''
 
-    const respuesta = await apiFetch<{ mensaje: string }>(
-      `/api/turnos/solicitudes/${solicitud.id}/confirmar`,
+    //respuesta de la API al confirmar la solicitud, se envía la fecha y hora en formato ISO
+    const respuesta = await apiFetch<{ mensaje: string }>( 
+      `/api/turnos/solicitudes/${solicitud.id}/confirmar`, 
       {
-        method: 'PATCH',
-        body: JSON.stringify({
-          fechaHora: fechaHora.toISOString(),
+        method: 'PATCH', //metodo patch para actualizar la solicitud
+        body: JSON.stringify({ //envío de datos en formato JSON
+          fechaHora: fechaHora.toISOString(), //fecha y hora en formato ISO
         }),
       },
     )
 
-    mensaje.value = respuesta.mensaje
+    mensaje.value = respuesta.mensaje //mensaje de éxito recibido desde la API
     await cargarDatos()
-  } catch (e) {
+  } catch (e) { //manejo de errores si la petición falla
     error.value = e instanceof Error
       ? e.message
       : 'No se pudo confirmar la solicitud.'
   } finally {
-    procesandoId.value = ''
+    procesandoId.value = '' //indico que ya no se está procesando ninguna solicitud
   }
 }
 
-async function rechazarSolicitud(solicitud: SolicitudApi) {
-  const confirmar = window.confirm(
+//si la fecha no le conviene a la clinica puede rechazar esa solicitud
+async function rechazarSolicitud(solicitud: SolicitudApi) {  
+  const confirmar = window.confirm( //se abre una ventana de confirmación para asegurarse que quiere rechazar la solicitud
     `¿Estás segura de que querés rechazar la solicitud de ${solicitud.paciente.apellido}, ${solicitud.paciente.nombre}?`,
   )
 
-  if (!confirmar) return
+  if (!confirmar) return //si el usuario cancela, no se hace nada
 
-  try {
+  try { //intento de rechazar la solicitud
     procesandoId.value = solicitud.id
     error.value = ''
     mensaje.value = ''
 
+    //respuesta de la API al rechazar la solicitud
     const respuesta = await apiFetch<{ mensaje: string }>(
       `/api/turnos/solicitudes/${solicitud.id}/rechazar`,
       {
-        method: 'PATCH',
+        method: 'PATCH', //metodo patch para actualizar la solicitud
       },
     )
 
-    mensaje.value = respuesta.mensaje
+    mensaje.value = respuesta.mensaje //mensaje de éxito recibido desde la API
     await cargarDatos()
   } catch (e) {
-    error.value = e instanceof Error
+    error.value = e instanceof Error //Mensaje de error si la petición falla
       ? e.message
       : 'No se pudo rechazar la solicitud.'
   } finally {
@@ -163,53 +134,56 @@ async function rechazarSolicitud(solicitud: SolicitudApi) {
   }
 }
 
-const solicitudesPendientes = computed(() =>
+const solicitudesPendientes = computed(() => //filtra las solicitudes que están pendientes de atención
   solicitudes.value.filter((solicitud) => solicitud.estado === 'PENDIENTE'),
 )
 
-const solicitudesProcesadas = computed(() =>
+const solicitudesProcesadas = computed(() => //filtra las solicitudes que ya fueron procesadas (confirmadas o rechazadas)
   solicitudes.value.filter((solicitud) => solicitud.estado !== 'PENDIENTE'),
 )
 
-const turnosFiltrados = computed(() => {
+const turnosFiltrados = computed(() => { //filtra los turnos según el estado seleccionado y la búsqueda ingresada por el usuario
   const texto = busqueda.value.trim().toLowerCase()
 
-  return turnos.value
+  return turnos.value //filtra los turnos según el estado seleccionado y la búsqueda ingresada por el usuario
     .filter((turno) => {
       const cumpleEstado =
         filtroEstado.value === 'TODOS' ||
-        turno.estado === filtroEstado.value
+        turno.estado === filtroEstado.value //si el filtro es "TODOS" o el estado del turno coincide con el filtro,
+        // se cumple la condición
 
       const pacienteNombre =
-        `${turno.paciente?.nombre || ''} ${turno.paciente?.apellido || ''}`.toLowerCase()
+        `${turno.paciente?.nombre || ''} ${turno.paciente?.apellido || ''}`.toLowerCase() //obtengo el nombre completo del paciente en minúsculas
 
       const pacienteDni = turno.paciente?.dni || ''
-      const empresaNombre = turno.paciente?.empresa?.razonSocial || ''
+      const empresaNombre = turno.paciente?.empresa?.razonSocial || '' //obtengo el nombre de la empresa en minúsculas
 
-      const cumpleTexto =
+      //busco si todos los campos contienen texto ingresado por el usuario, si alguno coincide, se cumple la condición
+            const cumpleTexto =
         !texto ||
         pacienteNombre.includes(texto) ||
         pacienteDni.includes(texto) ||
         empresaNombre.toLowerCase().includes(texto)
 
-      return cumpleEstado && cumpleTexto
+      return cumpleEstado && cumpleTexto //devuelvo true si se cumplen ambas condiciones, false si no
     })
-    .sort((a, b) => a.fechaHora.localeCompare(b.fechaHora))
+    .sort((a, b) => a.fechaHora.localeCompare(b.fechaHora)) //ordeno los turnos por fecha y hora de forma ascendente
 })
 
+// Etiquetas para los estados de los turnos, se usan en la tabla de turnos programados
 const etiquetas: Record<string, string> = {
   PENDIENTE: 'Pendiente',
   ASISTIO: 'Asistió',
   CANCELADO: 'Cancelado',
 }
-
+//estilos para los estados de los turnos, se usan en la tabla de turnos programados
 const estilos: Record<string, string> = {
   PENDIENTE: 'bg-amber-50 text-amber-700',
   ASISTIO: 'bg-emerald-50 text-emerald-700',
   CANCELADO: 'bg-red-50 text-red-700',
 }
 
-onMounted(cargarDatos)
+onMounted(cargarDatos) //cuando el componente se monta, carga los datos iniciales
 </script>
 
 <template>

@@ -1,4 +1,8 @@
-export type EstadoAptitud = | 'APTO'  | 'NO_APTO' | 'PENDIENTE'  | 'APTO_CON_OBSERVACIONES'
+export type EstadoAptitud =
+  | 'APTO'
+  | 'NO_APTO'
+  | 'PENDIENTE'
+  | 'APTO_CON_OBSERVACIONES'
 
 export type EstadoTurnoEmpresa = 'PENDIENTE' | 'ASISTIO' | 'CANCELADO'
 
@@ -9,22 +13,70 @@ export interface TrabajadorEmpresa {
   dni: string
   apellido: string
   nombre: string
-  puesto: string
   estadoAptitud: EstadoAptitud
   fechaVencimiento: string | null // AAAA-MM-DD; null si todavía no hay apto vigente
+  puesto: {
+    id: string
+    nombrePuesto: string
+    mesesVigencia: number
+  } | null
+
 }
+
 
 export interface TurnoEmpresa {
-  id: string
+   id: string
   trabajadorId: string
-  fechaHora: string
-  horaAConfirmar?: boolean // true si la empresa lo pidió y la clínica todavía no fijó la hora
   trabajador: string
+  fechaHora: string
+  horaAConfirmar: boolean
+  sedeId: string
   sede: string
+  direccionSede?: string | null
   estado: EstadoTurnoEmpresa
+  estadoSolicitud?: string
 }
 
-export interface DatosEmpresa {
+
+  export interface Empresa {
+  id: string
   razonSocial: string
   cuit: string
+}
+
+export interface RespuestaEmpresa {
+  mensaje: string
+  empresa: Empresa
+  trabajadores: TrabajadorEmpresa[]
+}
+
+
+export interface Sede {
+  id: string
+  nombre: string
+  direccion: string
+}
+
+
+
+
+export interface RespuestaTrabajadores {
+  mensaje: string
+  trabajadores: TrabajadorEmpresa[]
+}
+
+export interface RespuestaSedes {
+  mensaje: string
+  sedes: Sede[]
+}
+
+export interface RespuestaTurnos {
+  mensaje: string
+  turnos: TurnoEmpresa[]
+}
+export interface PorSolicitar {
+  trabajador: TrabajadorEmpresa
+  texto: string
+  urgente: boolean
+  orden: number
 }

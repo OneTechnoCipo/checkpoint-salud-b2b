@@ -4,20 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { apiFetch } from '../services/api'
-
-type RolUsuario = 'PACIENTE' | 'CLINICA' | 'EMPRESA' | 'ADMIN'
-
-interface Puesto {
-  id: string
-  nombrePuesto: string
-}
-
-interface Empresa {
-  id: string
-  razonSocial: string
-  cuit: string
-  puestos: Puesto[]
-}
+import type { Empresa, RolUsuario } from '../types/admin.ts'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -45,6 +32,7 @@ const puestosDisponibles = computed(() => {
 const esPaciente = computed(() => tipoCuenta.value === 'PACIENTE')
 const esEmpresa = computed(() => tipoCuenta.value === 'EMPRESA')
 
+//funcion de cierre de sesion
 function cerrarSesion() {
   authStore.cerrarSesion()
   router.push('/login')
