@@ -46,7 +46,6 @@ const router = createRouter({
         {
           path: 'aptos',
           name: 'clinica-aptos',
-          // Corregido para que apunte directamente a tu componente de aptos y vencimientos
           component: () => import('../views/clinica/AptosVencimientoView.vue'),
           props: { titulo: 'Aptos y vencimientos' },
         },
@@ -82,7 +81,7 @@ const router = createRouter({
         {
           path: 'aptos',
           name: 'empresa-aptos',
-          component: () => import('../views/EnDesarrolloView.vue'),
+          component: () => import('../views/empresa/AptosVencimientoView.vue'),
           props: { titulo: 'Aptos y vencimientos' },
         },
         {
