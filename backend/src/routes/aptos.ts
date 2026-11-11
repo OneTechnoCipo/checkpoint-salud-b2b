@@ -1,4 +1,3 @@
-
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import multer from "multer";
@@ -143,9 +142,33 @@ export const aptosRouter = express.Router();
 aptosRouter.get(
   "/",
   autenticar,
-  permitirRoles("CLINICA"),
-  async (_req, res) => {
+  permitirRoles("CLINICA", "EMPRESA"),
+  async (req, res) => {
     try {
+      const rol = req.usuario?.rol;
+      let empresaFiltro = {};
+
+      if (rol === "EMPRESA") {
+        const usuarioId = req.usuario?.id;
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: usuarioId },
+          select: { empresaId: true },
+        });
+
+        if (!usuario?.empresaId) {
+          res.status(403).json({
+            mensaje: "El usuario no está asociado a ninguna empresa.",
+          });
+          return;
+        }
+
+        empresaFiltro = {
+          paciente: {
+            empresaId: usuario.empresaId,
+          },
+        };
+      }
+
       const aptos = await prisma.aptoMedico.findMany({
         where: {
           estadoAptitud: {
@@ -157,6 +180,7 @@ aptosRouter.get(
           fechaVencimiento: {
             not: null,
           },
+          ...empresaFiltro,
         },
         orderBy: {
           fechaVencimiento: "asc",
